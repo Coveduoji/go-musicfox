@@ -170,6 +170,8 @@ type Player interface {
 ### 其他模块
 
 - **歌词**：LRC/YRC 格式，支持 smooth/wave/glow 渲染模式；未匹配的云盘歌曲（含旧播放快照）优先通过云盘歌词接口获取内嵌歌词，失败时回退普通歌曲歌词接口
+- **自适应播放区**：`[main.lyric].layout = "adaptive"`（默认）使用 `internal/ui/pixel_cover_renderer.go`，复用现有封面下载缓存与歌词渲染；ANSI 前景/背景双色 `▀` 显示像素封面，不依赖 Kitty 协议。窗口宽度至少 76 列时左右排列，否则封面在上、歌词在下；高度不足时减少歌词行数、缩小或隐藏封面。`classic` 恢复原歌词/Kitty 封面布局。封面异步加载，取消过期请求，按尺寸与主题缓存字符结果；失败后冷却 30 秒再尝试。
+- **固定播放底栏**：`SongInfoRenderer` 与 `ProgressRenderer` 实现 foxful-cli 的 `BottomComponent`，主视图先预留其实际高度，再将剩余空间交给 `FlexibleComponent`（像素封面/歌词区）；缩放、菜单搜索与弹窗均不会改变底栏锚点。播放/暂停使用 `[Ⅱ]` / `[▶]`，喜欢使用 `♥` / `♡`；`SongInfoRenderer` 将裁剪与居中后的实际文字区间存入 `Netease.playbarBounds`，点击和 hover 共用该结果，空白区域不触发歌曲/歌手操作。
 - **播放列表**：列表循环/顺序/单曲循环/随机/无限随机/智能心动模式。`Player.CurSong()` 通过管理器 `GetCurrentSong()` 在读锁内读取单首歌曲；`Player.QueuePosition()` 通过 `GetQueuePosition()` 在同一读锁内读取当前零基索引和总数。渲染组件使用这两个接口，避免为读取当前歌曲或计数调用会复制完整列表的 `Playlist()`。
 - **远程控制**：MPRIS(linux)、Now Playing(macOS)、System Media(Windows)。macOS 侧 `internal/macdriver/mediaplayer` 与 `internal/macdriver/cocoa/unnotifications.go` 的框架加载（Dlopen）失败不 panic 静默降级：MediaPlayer.framework 需 macOS 10.12.2+、UserNotifications.framework 需 10.14+，旧系统上 class 查找得 nil、objc 消息发送安全返回 0，对应功能（Now Playing 远程控制/系统通知）自动禁用而不影响主应用启动
 - **状态栏组件**：`model.DefaultStatusBar.Components` 可注入任意 `StatusBarComponent` 到居中区域；展示项只实现 `View`，可点击项额外实现 `InteractiveStatusBarComponent`，以自身局部坐标处理命中和事件。状态栏负责布局、边界与指针，不持有业务回调。播放队列适配器的 `musicfox` 前缀自行打开 `https://github.com/go-musicfox/go-musicfox`，队列位置与音质文本不触发。
@@ -220,6 +222,10 @@ type Player interface {
 ```bash
 make vendor
 ```
+
+本地固定底栏与弹性组件接口补丁保存在 `patches/foxful-cli-fixed-footer.patch`，
+`make vendor` 在 `go mod vendor` 后通过跨平台 `git apply` 自动重新应用。
+升级 foxful-cli 时应检查补丁是否已被上游覆盖、是否仍适用；冲突会直接失败，不能静默跳过。
 
 #### foxful-cli 依赖更新流程
 

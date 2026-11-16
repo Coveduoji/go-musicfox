@@ -195,6 +195,8 @@ func (c VisualizerConfig) IsSpectrogram() bool {
 
 // LyricConfig 歌词显示相关设置
 type LyricConfig struct {
+	// Layout selects adaptive pixel covers or the original lyric/Kitty layout.
+	Layout string `koanf:"layout"`
 	// 显示歌词
 	Show bool `koanf:"show"`
 	// 显示歌词翻译

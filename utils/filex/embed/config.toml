@@ -132,6 +132,8 @@ inAppTimeout = 4
 
 # 歌词显示相关设置
 [main.lyric]
+# 封面与歌词布局：adaptive 自动左右/上下排列（像素封面）；classic 使用原布局
+layout = "adaptive"
 # 是否显示歌词
 show = true
 # 是否显示翻译歌词

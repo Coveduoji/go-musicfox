@@ -24,3 +24,17 @@ type Component interface {
 	// render nothing. The lines return value is currently unused.
 	View(a *App, main *Main) (view string, lines int)
 }
+
+// BottomComponent is anchored below the body and above a bottom status bar.
+// Main reserves its actual rendered height before sizing flexible components.
+type BottomComponent interface {
+	Component
+	ViewBottom(a *App, main *Main) string
+}
+
+// FlexibleComponent receives the exact remaining space after the menu, ordinary
+// components and fixed footer. Implementations must fit within width and height.
+type FlexibleComponent interface {
+	Component
+	ViewWithSize(a *App, main *Main, width, height int) string
+}

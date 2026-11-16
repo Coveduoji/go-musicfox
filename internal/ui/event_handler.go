@@ -8,7 +8,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/anhoder/foxful-cli/model"
 	"github.com/anhoder/foxful-cli/style"
-	"github.com/mattn/go-runewidth"
 
 	"github.com/go-musicfox/go-musicfox/internal/configs"
 	"github.com/go-musicfox/go-musicfox/internal/keybindings"
@@ -467,223 +466,70 @@ func (h *EventHandler) MouseMsgHandle(msg tea.MouseMsg, a *model.App) (stopPropa
 	return false, nil, nil
 }
 
-// handlePlayerBarClick 处理播放栏点击事件
+// playerInfoRow follows the footer height, including the no-track startup state.
+func (h *EventHandler) playerInfoRow(a *model.App, main *model.Main) int {
+	offset := PlayModeRowOffset
+	if h.netease.player.CurSong().Duration <= 0 {
+		offset--
+	}
+	return main.EffectiveWindowHeight(a) - offset
+}
+
+func (h *EventHandler) playbarElementAt(x int) PlaybarElement {
+	for _, bound := range h.netease.playbarBounds {
+		if x >= bound.start && x < bound.end {
+			return bound.element
+		}
+	}
+	return PlaybarElementNone
+}
+
 func (h *EventHandler) handlePlayerBarClick(msg tea.MouseMsg, a *model.App, main *model.Main) (bool, model.Page, tea.Cmd) {
-	playModeRow := main.EffectiveWindowHeight(a) - PlayModeRowOffset
-	if msg.Mouse().Y != playModeRow {
+	if msg.Mouse().Y != h.playerInfoRow(a, main) {
 		return false, nil, nil
 	}
-
-	// 播放模式点击
-	if handled, page, cmd := h.handlePlayModeClick(msg, a, main); handled {
-		return handled, page, cmd
-	}
-
-	// 播放栏其他元素点击
-	return h.handlePlayerBarElementsClick(msg, a, main)
-}
-
-// handlePlayModeClick 播放模式点击
-func (h *EventHandler) handlePlayModeClick(msg tea.MouseMsg, a *model.App, main *model.Main) (bool, model.Page, tea.Cmd) {
 	player := h.netease.player
-	menuStartColumn := main.MenuStartColumn()
-
-	if menuStartColumn > MenuArrowWidth {
-		playModeEndX := menuStartColumn + PlayModeClickWidth
-		if msg.Mouse().X >= menuStartColumn-MenuArrowWidth && msg.Mouse().X <= playModeEndX {
-			player.SwitchMode()
-			return true, main, a.Tick(time.Nanosecond)
-		}
-	}
-	return false, nil, nil
-}
-
-// handlePlayerBarElementsClick 播放栏其他元素点击
-func (h *EventHandler) handlePlayerBarElementsClick(msg tea.MouseMsg, a *model.App, main *model.Main) (bool, model.Page, tea.Cmd) {
-	player := h.netease.player
-	curSong := player.CurSong()
-
-	mouse := msg.Mouse()
-
-	if curSong.Id == 0 {
-		return false, nil, nil
-	}
-
-	menuStartColumn := main.MenuStartColumn()
-	leftPad := 0
-	if !main.CenterEverything() && menuStartColumn-MenuArrowWidth > 0 {
-		leftPad = menuStartColumn - MenuArrowWidth
-	}
-
-	currentX := leftPad
-
-	// Mode & Volume 宽度
-	if menuStartColumn-MenuArrowWidth > 0 {
-		modeStr := fmt.Sprintf("[%s] ", player.Mode().Name())
-		modeWidth := runewidth.StringWidth(modeStr)
-		volStr := fmt.Sprintf("%d%% ", player.Volume())
-		volWidth := runewidth.StringWidth(volStr)
-		currentX += modeWidth + volWidth
-	}
-
-	// 播放状态
-	stateText := "_ z Z Z "
-	if player.State() == types.Playing {
-		stateText = "♫ ♪ ♫ ♪ "
-	}
-	stateWidth := runewidth.StringWidth(stateText)
-
-	if mouse.X >= currentX && mouse.X < currentX+stateWidth {
+	switch h.playbarElementAt(msg.Mouse().X) {
+	case PlaybarElementMode:
+		player.SwitchMode()
+	case PlaybarElementState:
 		h.playOrToggleHandle()
-		return true, main, a.Tick(time.Nanosecond)
-	}
-	currentX += stateWidth
-
-	// 喜欢状态
-	heartWidth := 0
-	if curSong.Id > 0 {
-		_ = likelist.IsLikeSong(curSong.Id)
-		heartWidth = runewidth.StringWidth("♥ ")
-	}
-	if heartWidth > 0 {
-		if mouse.X >= currentX && mouse.X < currentX+heartWidth {
-			isLiked := likelist.IsLikeSong(curSong.Id)
-			newPage := likeSong(h.netease, !isLiked, false)
-			return true, newPage, a.Tick(time.Nanosecond)
+	case PlaybarElementHeart:
+		if player.CurSong().Id <= 0 {
+			return false, nil, nil
 		}
-		currentX += heartWidth
-	}
-
-	// 歌曲名
-	songName := curSong.Name
-	songShownWidth := runewidth.StringWidth(songName)
-	if !main.CenterEverything() {
-		prefixLen := SongInfoPrefixBaseWidth
-		if main.MenuStartColumn()-MenuArrowWidth > 0 {
-			prefixLen += SongInfoPrefixExtraWidth
-		}
-		maxSongWidth := a.WindowWidth() - main.MenuStartColumn() - prefixLen
-		if songShownWidth > maxSongWidth {
-			songShownWidth = maxSongWidth
-		}
-	}
-
-	if mouse.X >= currentX && mouse.X < currentX+songShownWidth {
+		page := likeSong(h.netease, !likelist.IsLikeSong(player.CurSong().Id), false)
+		return true, page, a.Tick(time.Nanosecond)
+	case PlaybarElementSongName:
 		action(h.netease, true)
-		return true, main, a.Tick(time.Nanosecond)
-	}
-	currentX += songShownWidth + 1
-
-	// 歌手
-	if mouse.X >= currentX {
+	case PlaybarElementArtist:
 		goToArtistOfSong(h.netease, false)
-		return true, main, a.Tick(time.Nanosecond)
+	default:
+		return false, nil, nil
 	}
-
-	return false, nil, nil
+	return true, main, a.Tick(time.Nanosecond)
 }
 
-// handlePlaybarMotion tracks the hovered playbar element and switches the mouse pointer.
+// Hover uses the bounds recorded while rendering, including clipping and padding.
 func (h *EventHandler) handlePlaybarMotion(msg tea.MouseMsg, a *model.App, main *model.Main) (bool, tea.Cmd) {
-	player := h.netease.player
 	mouse := msg.Mouse()
-	playModeRow := main.EffectiveWindowHeight(a) - PlayModeRowOffset
-	progressBarRow := main.EffectiveWindowHeight(a) - 1
-
-	newHover := PlaybarElementNone
-	needsPointer := false
-
-	progressBarWidth := a.WindowWidth() - ProgressTimeDisplayWidth
-	if mouse.Y == progressBarRow && mouse.X < progressBarWidth {
-		newHover = PlaybarElementProgressBar
-		needsPointer = true
-	} else if mouse.Y == playModeRow {
-		curSong := player.CurSong()
-		if curSong.Id == 0 {
-			menuStartColumn := main.MenuStartColumn()
-			if menuStartColumn > MenuArrowWidth {
-				playModeEndX := menuStartColumn + PlayModeClickWidth
-				if mouse.X >= menuStartColumn-MenuArrowWidth && mouse.X <= playModeEndX {
-					newHover = PlaybarElementMode
-					needsPointer = true
-				}
-			}
-		} else {
-			menuStartColumn := main.MenuStartColumn()
-			leftPad := 0
-			if !main.CenterEverything() && menuStartColumn-MenuArrowWidth > 0 {
-				leftPad = menuStartColumn - MenuArrowWidth
-			}
-			currentX := leftPad
-
-			if menuStartColumn-MenuArrowWidth > 0 {
-				modeWidth := runewidth.StringWidth(fmt.Sprintf("[%s] ", player.Mode().Name()))
-				volWidth := runewidth.StringWidth(fmt.Sprintf("%d%% ", player.Volume()))
-				if mouse.X >= currentX && mouse.X < currentX+modeWidth {
-					newHover = PlaybarElementMode
-					needsPointer = true
-				}
-				currentX += modeWidth + volWidth
-			}
-
-			stateText := "_ z Z Z "
-			if player.State() == types.Playing {
-				stateText = "♫ ♪ ♫ ♪ "
-			}
-			stateWidth := runewidth.StringWidth(stateText)
-			if mouse.X >= currentX && mouse.X < currentX+stateWidth {
-				newHover = PlaybarElementState
-				needsPointer = true
-			}
-			currentX += stateWidth
-
-			heartWidth := runewidth.StringWidth("♥ ")
-			if mouse.X >= currentX && mouse.X < currentX+heartWidth {
-				newHover = PlaybarElementHeart
-				needsPointer = true
-			}
-			currentX += heartWidth
-
-			songShownWidth := runewidth.StringWidth(curSong.Name)
-			if !main.CenterEverything() {
-				prefixLen := SongInfoPrefixBaseWidth
-				if main.MenuStartColumn()-MenuArrowWidth > 0 {
-					prefixLen += SongInfoPrefixExtraWidth
-				}
-				maxSongWidth := a.WindowWidth() - main.MenuStartColumn() - prefixLen
-				if songShownWidth > maxSongWidth {
-					songShownWidth = maxSongWidth
-				}
-			}
-			if mouse.X >= currentX && mouse.X < currentX+songShownWidth {
-				newHover = PlaybarElementSongName
-				needsPointer = true
-			}
-			currentX += songShownWidth + 1
-
-			if mouse.X >= currentX {
-				newHover = PlaybarElementArtist
-				needsPointer = true
-			}
-		}
+	hover := PlaybarElementNone
+	if h.netease.player.CurSong().Duration > 0 && mouse.Y == main.EffectiveWindowHeight(a)-1 && mouse.X >= 0 && mouse.X < max(0, a.WindowWidth()-ProgressTimeDisplayWidth) {
+		hover = PlaybarElementProgressBar
+	} else if mouse.Y == h.playerInfoRow(a, main) {
+		hover = h.playbarElementAt(mouse.X)
 	}
-
-	if newHover != h.netease.playbarHoveredElement {
-		h.netease.playbarHoveredElement = newHover
+	if hover != h.netease.playbarHoveredElement {
+		h.netease.playbarHoveredElement = hover
 		pointer := "default"
-		if needsPointer {
+		if hover != PlaybarElementNone {
 			pointer = "pointer"
 		}
 		return true, tea.Sequence(a.RerenderCmd(true), a.SetMousePointer(pointer))
 	}
-
-	// Hover 未变化时，若鼠标仍停留在播放栏可点击元素上，必须消费该事件，
-	// 并重新发送 SetMousePointer，否则 foxful-cli 的 mouseMotionHandle 在后续
-	// motion 事件中会因 isOverClickableElement 不识别播放栏而重置指针为 "default"。
-	if newHover != PlaybarElementNone {
+	if hover != PlaybarElementNone {
 		return true, a.SetMousePointer("pointer")
 	}
-
 	return false, nil
 }
 
@@ -691,7 +537,7 @@ func (h *EventHandler) handleProgressBarSeek(msg tea.MouseMsg, a *model.App, mai
 	player := h.netease.player
 	x, y := msg.Mouse().X, msg.Mouse().Y
 	progressBarWidth := a.WindowWidth() - ProgressTimeDisplayWidth
-	if y+1 == main.EffectiveWindowHeight(a) && x+1 <= progressBarWidth {
+	if y+1 == main.EffectiveWindowHeight(a) && x >= 0 && progressBarWidth > 0 && x < progressBarWidth {
 		allDuration := int(player.CurMusic().Duration.Seconds())
 		if allDuration == 0 {
 			return true, main, nil

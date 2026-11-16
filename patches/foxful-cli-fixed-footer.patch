@@ -1,0 +1,151 @@
+diff --git a/model/component.go b/model/component.go
+index 94b30d78..927ded0a 100644
+--- a/model/component.go
++++ b/model/component.go
+@@ -24,3 +24,17 @@ type Component interface {
+ 	// render nothing. The lines return value is currently unused.
+ 	View(a *App, main *Main) (view string, lines int)
+ }
++
++// BottomComponent is anchored below the body and above a bottom status bar.
++// Main reserves its actual rendered height before sizing flexible components.
++type BottomComponent interface {
++	Component
++	ViewBottom(a *App, main *Main) string
++}
++
++// FlexibleComponent receives the exact remaining space after the menu, ordinary
++// components and fixed footer. Implementations must fit within width and height.
++type FlexibleComponent interface {
++	Component
++	ViewWithSize(a *App, main *Main, width, height int) string
++}
+diff --git a/model/main.go b/model/main.go
+index e3c4dc3b..a26beb14 100644
+--- a/model/main.go
++++ b/model/main.go
+@@ -505,7 +505,7 @@ func (m *Main) View(a *App) string {
+ 
+ 	// ── 1. Top bar: status bar (when position=top) OR title bar ──
+ 	if m.statusBar != nil && m.options.StatusBarPosition == StatusBarTop {
+-		statusBarView := m.statusBar.View(a, m)
++		statusBarView := ansi.Truncate(strings.Split(m.statusBar.View(a, m), "\n")[0], w, "")
+ 		sections = append(sections, statusBarView)
+ 	} else if m.options.WhetherDisplayTitle {
+ 		sections = append(sections, m.TitleView(a))
+@@ -570,52 +570,90 @@ func (m *Main) View(a *App) string {
+ 		sections = append(sections, "\n\n\n")
+ 	}
+ 
+-	// ── 3. Components (natural flow) ──
++	// Measure the fixed footer before assigning space to flexible components.
++	statusBarView := ""
++	statusBarH := 0
++	if m.statusBar != nil && m.options.StatusBarPosition == StatusBarBottom {
++		statusBarView = ansi.Truncate(strings.Split(m.statusBar.View(a, m), "\n")[0], w, "")
++		statusBarH = lipgloss.Height(statusBarView)
++	}
++	var bottomSections []string
++	for _, component := range m.components {
++		if bottom, ok := component.(BottomComponent); ok {
++			if view := bottom.ViewBottom(a, m); view != "" {
++				bottomSections = append(bottomSections, view)
++			}
++		}
++	}
++	bottomView := ""
++	bottomH := 0
++	if len(bottomSections) > 0 {
++		bottomView = layout.JoinVertical(lipgloss.Left, bottomSections...)
++		bottomH = lipgloss.Height(bottomView)
++	}
++	targetHeight := max(0, h-statusBarH)
++
+ 	for _, component := range m.components {
+ 		if component == nil {
+ 			continue
+ 		}
+-		view, _ := component.View(a, m)
++		if _, ok := component.(BottomComponent); ok {
++			continue
++		}
++		var view string
++		if flexible, ok := component.(FlexibleComponent); ok {
++			used := lipgloss.Height(layout.JoinVertical(lipgloss.Left, sections...))
++			view = flexible.ViewWithSize(a, m, w, max(0, targetHeight-bottomH-used))
++		} else {
++			view, _ = component.View(a, m)
++		}
+ 		if view != "" {
+ 			sections = append(sections, view)
+ 		}
+ 	}
+-
+-	// ── 4. Compose vertically ──
+ 	body := layout.JoinVertical(lipgloss.Left, sections...)
+-
+-	// ── 5. Status bar at bottom ──
+-	statusBarView := ""
+-	statusBarH := 0
+-	if m.statusBar != nil && m.options.StatusBarPosition == StatusBarBottom {
+-		statusBarView = m.statusBar.View(a, m)
+-		statusBarH = lipgloss.Height(statusBarView)
+-	}
+-
+-	// ── 6. Adjust body height for status bar ──
+-	// Components use a.WindowHeight() which doesn't account for the status bar.
+-	// Trim body to targetHeight to prevent overflow when status bar is present.
+ 	ss := style.CurrentStyleSet()
+ 
+-	targetHeight := h - statusBarH
+-	bodyHeight := lipgloss.Height(body)
+-	if bodyHeight > targetHeight {
+-		lines := strings.Split(body, "\n")
+-		if len(lines) > targetHeight {
+-			body = strings.Join(lines[:targetHeight], "\n")
++	// Keep the footer visible even when the menu itself exceeds the viewport.
++	if bottomH > targetHeight {
++		bottomLines := strings.Split(bottomView, "\n")
++		bottomView = strings.Join(bottomLines[len(bottomLines)-targetHeight:], "\n")
++		bottomH = targetHeight
++	}
++	bodyTarget := targetHeight - bottomH
++	if bodyTarget == 0 {
++		body = ""
++	} else if bodyHeight := lipgloss.Height(body); bodyHeight > bodyTarget {
++		body = strings.Join(strings.Split(body, "\n")[:bodyTarget], "\n")
++	} else if bodyHeight < bodyTarget {
++		body = ss.AppBackground.Height(bodyTarget).Render(body)
++	}
++	if bottomH > 0 {
++		if body == "" {
++			body = bottomView
++		} else {
++			body = layout.JoinVertical(lipgloss.Left, body, bottomView)
+ 		}
+-	} else if bodyHeight < targetHeight {
+-		body = style.CurrentStyleSet().AppBackground.Height(targetHeight).Render(body)
+ 	}
+ 
+ 	// Combine body + status bar, then apply the app background everywhere except
+ 	// the cover rectangle registered by its absolute-positioned renderer.
+ 	var content string
+-	if statusBarView != "" {
++	if statusBarView != "" && body == "" {
++		content = statusBarView
++	} else if statusBarView != "" {
+ 		content = lipgloss.JoinVertical(lipgloss.Left, body, statusBarView)
+ 	} else {
+ 		content = body
+ 	}
++	// Extremely narrow terminals can be smaller than the title itself.
++	rows := strings.Split(content, "\n")
++	for i, row := range rows {
++		if ansi.StringWidth(row) > w {
++			rows[i] = ansi.Truncate(row, w, "")
++		}
++	}
++	content = strings.Join(rows, "\n")
+ 	return renderAppBackground(content, w, ss.AppBackground, a.appBackgroundExclusion)
+ }
+ 

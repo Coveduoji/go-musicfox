@@ -125,6 +125,7 @@ modvendor-tool:
 vendor: modvendor-tool
 	go mod tidy
 	go mod vendor
+	git apply --directory=vendor/github.com/anhoder/foxful-cli patches/foxful-cli-fixed-footer.patch
 	@echo "Copying C/C++ header files for CGo dependencies..."
 	modvendor -copy="**/*.h **/*.c" -v
 

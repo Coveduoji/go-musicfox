@@ -451,6 +451,27 @@ emptyCharBlock = " "       # 空白字符
 <details>
 <summary>
 
+### 终端像素封面与自适应歌词
+</summary>
+
+在配置文件中设置：
+
+```toml
+[main.lyric]
+layout = "adaptive" # 默认；classic 恢复原歌词与 Kitty 封面布局
+```
+
+宽窗口中封面在左、歌词在右；小于 76 列时改为封面在上、歌词在下。
+高度不足时先缩小封面、减少歌词行数，再隐藏封面，优先保留播放底栏。
+播放信息和进度条固定在窗口底部，操作与快捷键保持不变。
+
+像素封面复用现有歌曲封面下载与缓存，通过 ANSI 彩色半块字符显示，
+无需 Kitty 图形协议或特殊图标字体。`main.lyric.cover` 中的旋转、尺寸、
+tmux 透传设置仍用于 `classic` 模式下的 Kitty 封面。
+</details>
+<details>
+<summary>
+
 ### macOS 桌面歌词
 </summary>
 macOS 原生桌面歌词窗口，支持 YRC 逐字高亮、频谱可视化和完整的视觉定制。

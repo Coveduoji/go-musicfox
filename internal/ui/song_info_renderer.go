@@ -47,6 +47,12 @@ func NewSongInfoRenderer(netease *Netease, state playerRendererState) *SongInfoR
 // Update handles UI messages.
 func (r *SongInfoRenderer) Update(msg tea.Msg, a *model.App) {}
 
+// ViewBottom keeps the existing playback row in the fixed footer.
+func (r *SongInfoRenderer) ViewBottom(a *model.App, main *model.Main) string {
+	view, _ := r.View(a, main)
+	return view
+}
+
 // View renders the song information component.
 func (r *SongInfoRenderer) View(a *model.App, main *model.Main) (view string, lines int) {
 	// Every part of the song view is expressed as a segment: unformatted text followed by a color specification
@@ -56,6 +62,7 @@ func (r *SongInfoRenderer) View(a *model.App, main *model.Main) (view string, li
 		color     color.Color
 		underline bool
 		bold      bool
+		element   PlaybarElement
 	}
 
 	var (
@@ -84,25 +91,29 @@ func (r *SongInfoRenderer) View(a *model.App, main *model.Main) (view string, li
 	}
 
 	var (
-		builder  strings.Builder
-		segments []Segment
-		appColors = configs.GetCurrentAppColors()
-		artistColor = configs.SafeGetForeground(appColors.PlaybarArtist, configs.PlaybarArtistColor)
-		modeColor   = configs.SafeGetForeground(appColors.PlaybarMode, configs.PlaybarModeColor)
-		volumeColor = configs.SafeGetForeground(appColors.PlaybarVolume, configs.PlaybarVolumeColor)
-		playingColor = configs.SafeGetForeground(appColors.PlaybarPlaying, configs.PlaybarPlayingColor)
-		pausedColor  = configs.SafeGetForeground(appColors.PlaybarPaused, configs.PlaybarPausedColor)
+		builder           strings.Builder
+		segments          []Segment
+		appColors         = configs.GetCurrentAppColors()
+		artistColor       = configs.SafeGetForeground(appColors.PlaybarArtist, configs.PlaybarArtistColor)
+		modeColor         = configs.SafeGetForeground(appColors.PlaybarMode, configs.PlaybarModeColor)
+		volumeColor       = configs.SafeGetForeground(appColors.PlaybarVolume, configs.PlaybarVolumeColor)
+		playingColor      = configs.SafeGetForeground(appColors.PlaybarPlaying, configs.PlaybarPlayingColor)
+		pausedColor       = configs.SafeGetForeground(appColors.PlaybarPaused, configs.PlaybarPausedColor)
 		heartLikedColor   = configs.SafeGetForeground(appColors.PlaybarHeartLiked, configs.PlaybarHeartLikedColor)
 		heartUnlikedColor = configs.SafeGetForeground(appColors.PlaybarHeartUnliked, configs.PlaybarHeartUnlikedColor)
 	)
 
 	// Helper for adding a new segment
 	addSegment := func(text string, color color.Color, underline, bold bool) {
-		segments = append(segments, Segment{text, color, underline, bold})
+		segments = append(segments, Segment{text: text, color: color, underline: underline, bold: bold})
+	}
+	addControl := func(text string, color color.Color, bold bool, element PlaybarElement) {
+		addSegment(text, color, false, bold)
+		segments[len(segments)-1].element = element
 	}
 	// Helper for adding text whose color we don't care about
 	addText := func(text string) {
-		segments = append(segments, Segment{text, artistColor, false, false})
+		segments = append(segments, Segment{text: text, color: artistColor})
 	}
 	// Resolve the background once: the app background paints text glyph cells so
 	// they never reveal content drawn beneath the TUI. nil leaves it transparent.
@@ -118,12 +129,12 @@ func (r *SongInfoRenderer) View(a *model.App, main *model.Main) (view string, li
 		return s.Render(segment.text)
 	}
 
-	if main.MenuStartColumn()-MenuArrowWidth > 0 {
+	if width >= 40 {
 		if !main.CenterEverything() {
 			// Store plain spaces (not pre-rendered); renderSegment paints them with
 			// segmentBg. Pre-rendering here would make runewidth.StringWidth count the
 			// ANSI escape bytes, inflating totalWidth and shrinking the trailing fill.
-			addSegment(strings.Repeat(" ", main.MenuStartColumn()-MenuArrowWidth), artistColor, false, false)
+			addSegment(strings.Repeat(" ", min(main.MenuStartColumn()-MenuArrowWidth, max(0, (width-60)/2))), artistColor, false, false)
 		}
 		{
 			msg := r.state.Mode().Name()
@@ -132,7 +143,7 @@ func (r *SongInfoRenderer) View(a *model.App, main *model.Main) (view string, li
 			if modeBold {
 				c = util.GetPrimaryColor()
 			}
-			addSegment(fmt.Sprintf("[%s] ", msg), c, false, modeBold)
+			addControl(fmt.Sprintf("[%s] ", msg), c, modeBold, PlaybarElementMode)
 		}
 		addSegment(fmt.Sprintf("%d%% ", r.state.Volume()), volumeColor, false, false)
 	}
@@ -142,14 +153,14 @@ func (r *SongInfoRenderer) View(a *model.App, main *model.Main) (view string, li
 		if stateBold {
 			c = util.GetPrimaryColor()
 		}
-		addSegment("♫ ♪ ♫ ♪ ", c, false, stateBold)
+		addControl("[Ⅱ] ", c, stateBold, PlaybarElementState)
 	} else {
 		c := pausedColor
 		stateBold := hoveredElement == PlaybarElementState
 		if stateBold {
 			c = util.GetPrimaryColor()
 		}
-		addSegment("_ z Z Z ", c, false, stateBold)
+		addControl("[▶] ", c, stateBold, PlaybarElementState)
 	}
 
 	if song.Id > 0 {
@@ -163,7 +174,11 @@ func (r *SongInfoRenderer) View(a *model.App, main *model.Main) (view string, li
 		if heartBold && !isLike {
 			icolor = util.GetPrimaryColor()
 		}
-		addSegment("♥ ", icolor, false, heartBold)
+		heart := "♡ "
+		if isLike {
+			heart = "♥ "
+		}
+		addControl(heart, icolor, heartBold, PlaybarElementHeart)
 	}
 
 	if index, total := r.state.QueuePosition(); index >= 0 && index < total {
@@ -180,7 +195,7 @@ func (r *SongInfoRenderer) View(a *model.App, main *model.Main) (view string, li
 		// 优先保留歌曲名，歌手名用剩余空间
 		songMaxWidth := max(0, availableWidth-prefixUsedWidth-1) // -1 for space between
 		songName = runewidth.Truncate(songName, songMaxWidth, "")
-		addSegment(songName, util.GetPrimaryColor(), false, false)
+		addControl(songName, util.GetPrimaryColor(), false, PlaybarElementSongName)
 		addText(" ")
 
 		// 剩余空间全部给歌手名
@@ -191,38 +206,33 @@ func (r *SongInfoRenderer) View(a *model.App, main *model.Main) (view string, li
 		if artistHovered {
 			c = util.GetPrimaryColor()
 		}
-		addSegment(artistString, c, false, false)
+		addControl(artistString, c, false, PlaybarElementArtist)
 	}
 
-	if main.CenterEverything() {
-		totalWidth := 0
-		widthLimit := r.netease.WindowWidth() - SongInfoHorizontalPadding
-		for index, segment := range segments {
-			segmentWidth := runewidth.StringWidth(segment.text)
-			if totalWidth+segmentWidth > widthLimit {
-				segmentWidth = max(0, widthLimit-totalWidth)
-				segments[index].text = runewidth.Truncate(segment.text, segmentWidth, "")
-			}
-			totalWidth += segmentWidth
-		}
-		paddingLeft := (r.netease.WindowWidth() - totalWidth) / 2
-		builder.WriteString(style.CurrentStyleSet().AppBackground.Render(strings.Repeat(" ", paddingLeft)))
-		for _, segment := range segments {
-			builder.WriteString(renderSegment(segment))
-		}
-		builder.WriteString(style.CurrentStyleSet().AppBackground.Render(strings.Repeat(" ", r.netease.WindowWidth()-paddingLeft-totalWidth)))
-	} else {
-		// Left-aligned: concatenate segments, then fill trailing space to window width.
-		totalWidth := 0
-		for _, segment := range segments {
-			builder.WriteString(renderSegment(segment))
-			totalWidth += runewidth.StringWidth(segment.text)
-		}
-		remainingWidth := r.netease.WindowWidth() - totalWidth
-		if remainingWidth > 0 {
-			builder.WriteString(style.CurrentStyleSet().AppBackground.Render(strings.Repeat(" ", remainingWidth)))
-		}
+	// Render and record hit bounds from the same clipped segments. Icon widths,
+	// centering and narrow windows must never require a second layout formula.
+	limit := max(0, width)
+	totalWidth := 0
+	for i := range segments {
+		segments[i].text = runewidth.Truncate(segments[i].text, max(0, limit-totalWidth), "")
+		totalWidth += runewidth.StringWidth(segments[i].text)
 	}
+	leftPad := 0
+	if centered {
+		leftPad = max(0, (width-totalWidth)/2)
+	}
+	builder.WriteString(style.CurrentStyleSet().AppBackground.Render(strings.Repeat(" ", leftPad)))
+	r.netease.playbarBounds = nil
+	x := leftPad
+	for _, segment := range segments {
+		w := runewidth.StringWidth(segment.text)
+		if segment.element != PlaybarElementNone && w > 0 {
+			r.netease.playbarBounds = append(r.netease.playbarBounds, playbarBound{start: x, end: x + w, element: segment.element})
+		}
+		builder.WriteString(renderSegment(segment))
+		x += w
+	}
+	builder.WriteString(style.CurrentStyleSet().AppBackground.Render(strings.Repeat(" ", max(0, width-x))))
 
 	// Return the actual number of lines: 1 content line + 1 blank line separator.
 	// In the new JoinVertical model, the returned `lines` value is discarded (no longer

@@ -57,6 +57,7 @@ type Netease struct {
 	songInfoRenderer    *SongInfoRenderer
 	progressRenderer    *ProgressRenderer
 	coverRenderer       *CoverRenderer
+	pixelCoverRenderer  *PixelCoverRenderer
 	spectrumRenderer    *SpectrumRenderer
 	spectrogramRenderer *SpectrogramRenderer
 
@@ -65,6 +66,7 @@ type Netease struct {
 	trackManager *track.Manager
 
 	playbarHoveredElement PlaybarElement
+	playbarBounds         []playbarBound
 
 	// Theme switch notification: update in-place when visible, recreate when expired.
 	themeNotifID    model.NotificationID
@@ -104,6 +106,7 @@ func NewNetease(app *model.App) *Netease {
 	n.songInfoRenderer = NewSongInfoRenderer(n, n.player)
 	n.progressRenderer = NewProgressRenderer(n, n.player)
 	n.coverRenderer = NewCoverRenderer(n, n.player)
+	n.pixelCoverRenderer = NewPixelCoverRenderer(n, n.player)
 	n.spectrumRenderer = NewSpectrumRenderer(n.player)
 	n.spectrogramRenderer = NewSpectrogramRenderer(n.player)
 
@@ -125,11 +128,15 @@ func (n *Netease) Components() []model.Component {
 	if n.spectrogramRenderer.IsEnabled() {
 		components = append(components, n.spectrogramRenderer)
 	}
-	components = append(components, n.lyricRenderer)
+	if configs.AppConfig.Main.Lyric.Layout == "adaptive" {
+		components = append(components, n.pixelCoverRenderer)
+	} else {
+		components = append(components, n.lyricRenderer)
+	}
 	components = append(components, n.songInfoRenderer, n.progressRenderer)
 	// CoverRenderer uses absolute positioning and returns 0 lines, so it must
 	// be rendered last to overlay the normal layout.
-	if n.coverRenderer.IsEnabled() {
+	if configs.AppConfig.Main.Lyric.Layout != "adaptive" && n.coverRenderer.IsEnabled() {
 		components = append(components, n.coverRenderer)
 	}
 	return components
@@ -456,6 +463,9 @@ func (n *Netease) InitHook(_ *model.App) {
 }
 
 func (n *Netease) CloseHook(_ *model.App) {
+	if n.pixelCoverRenderer != nil {
+		n.pixelCoverRenderer.Close()
+	}
 	_ = n.player.Close()
 	n.lastfm.Close()
 

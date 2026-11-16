@@ -10,6 +10,7 @@ import (
 	"github.com/anhoder/foxful-cli/model"
 	"github.com/anhoder/foxful-cli/style"
 	"github.com/anhoder/foxful-cli/util"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/mattn/go-runewidth"
 
 	"github.com/go-musicfox/go-musicfox/internal/configs"
@@ -42,6 +43,12 @@ func NewProgressRenderer(netease *Netease, state playerRendererState) *ProgressR
 // Update handles UI messages.
 func (r *ProgressRenderer) Update(msg tea.Msg, a *model.App) {}
 
+// ViewBottom anchors the seek bar below the playback row.
+func (r *ProgressRenderer) ViewBottom(a *model.App, main *model.Main) string {
+	view, _ := r.View(a, main)
+	return view
+}
+
 func (r *ProgressRenderer) getRenderMode() progressRenderMode {
 	if configs.AppConfig.Theme.Progress.RenderMode != "" {
 		switch configs.AppConfig.Theme.Progress.RenderMode {
@@ -67,6 +74,7 @@ func (r *ProgressRenderer) View(a *model.App, main *model.Main) (view string, li
 	}
 
 	passedDuration := int(r.state.PassedTime().Seconds())
+	passedDuration = max(0, passedDuration)
 	displayDuration := passedDuration
 	if displayDuration > allDuration {
 		displayDuration = allDuration
@@ -133,6 +141,10 @@ func (r *ProgressRenderer) View(a *model.App, main *model.Main) (view string, li
 		styledTimes = util.SetFgBgStyle(times, util.GetPrimaryColor(), timesBg)
 	} else {
 		styledTimes = util.SetFgStyle(times, util.GetPrimaryColor())
+	}
+
+	if windowWidth := r.netease.WindowWidth(); windowWidth < ProgressTimeDisplayWidth {
+		return ansi.Truncate(styledTimes, max(0, windowWidth), ""), 1
 	}
 
 	view = progressView + appBg.Render(" ") + styledTimes
