@@ -40,9 +40,9 @@ endif
 .PHONY: build
 build:
 ifeq ($(OS),Windows_NT)
-	$(BUILD_SCRIPT) build -BuildTags "enable_global_hotkey,purego"
+	$(BUILD_SCRIPT) build -BuildTags "enable_global_hotkey,purego" -Ldflags "$(LDFLAGS)"
 else
-	BUILD_TAGS="enable_global_hotkey,purego" $(BUILD_SCRIPT) build
+	LDFLAGS="$(LDFLAGS)" BUILD_TAGS="enable_global_hotkey,purego" $(BUILD_SCRIPT) build
 endif
 
 # build-macapp 仅在 macOS 下有效
@@ -50,7 +50,7 @@ endif
 build-macapp:
 ifeq ($(IS_MACOS),Darwin)
 	@mkdir -p $(PACKAGE_ROOT)/bin
-	BUILD_TAGS="enable_global_hotkey,purego" $(BUILD_SCRIPT) build
+	LDFLAGS="$(LDFLAGS)" BUILD_TAGS="enable_global_hotkey,purego" $(BUILD_SCRIPT) build
 	@mkdir -p $(PACKAGE_ROOT)/bin/musicfox.app/Contents/MacOS
 	@mkdir -p $(PACKAGE_ROOT)/bin/musicfox.app/Contents/Resources
 	@cp $(PACKAGE_ROOT)/bin/musicfox $(PACKAGE_ROOT)/bin/musicfox.app/Contents/MacOS/go-musicfox
@@ -71,9 +71,9 @@ init:
 .PHONY: install
 install:
 ifeq ($(OS),Windows_NT)
-	$(BUILD_SCRIPT) install -BuildTags "enable_global_hotkey,purego"
+	$(BUILD_SCRIPT) install -BuildTags "enable_global_hotkey,purego" -Ldflags "$(LDFLAGS)"
 else
-	BUILD_TAGS="enable_global_hotkey,purego" $(BUILD_SCRIPT) install
+	LDFLAGS="$(LDFLAGS)" BUILD_TAGS="enable_global_hotkey,purego" $(BUILD_SCRIPT) install
 endif
 
 .PHONY: scoop-config-gen

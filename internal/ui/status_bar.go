@@ -50,14 +50,13 @@ func formatQueueAndQuality(player *Player) string {
 		return ""
 	}
 
-	playlist := player.Playlist()
-	if len(playlist) == 0 {
+	index, total := player.QueuePosition()
+	if index < 0 || index >= total {
 		return ""
 	}
 
 	// 队列位置（1-indexed 显示）
-	curIndex := player.CurSongIndex() + 1
-	total := len(playlist)
+	curIndex := index + 1
 	position := fmt.Sprintf("[%d/%d]", curIndex, total)
 
 	// 音质

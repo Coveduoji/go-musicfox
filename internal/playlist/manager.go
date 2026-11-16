@@ -117,6 +117,14 @@ func (pm *playlistManager) GetCurrentIndex() int {
 	return pm.currentIndex
 }
 
+// GetQueuePosition returns queue metadata without copying the playlist.
+func (pm *playlistManager) GetQueuePosition() (index, total int) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	return pm.currentIndex, len(pm.playlist)
+}
+
 // GetCurrentSong 获取当前播放的歌曲
 func (pm *playlistManager) GetCurrentSong() (structs.Song, error) {
 	pm.mu.RLock()

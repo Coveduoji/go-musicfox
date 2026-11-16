@@ -170,7 +170,7 @@ type Player interface {
 ### 其他模块
 
 - **歌词**：LRC/YRC 格式，支持 smooth/wave/glow 渲染模式；未匹配的云盘歌曲（含旧播放快照）优先通过云盘歌词接口获取内嵌歌词，失败时回退普通歌曲歌词接口
-- **播放列表**：列表循环/顺序/单曲循环/随机/无限随机/智能心动模式
+- **播放列表**：列表循环/顺序/单曲循环/随机/无限随机/智能心动模式。`Player.CurSong()` 通过管理器 `GetCurrentSong()` 在读锁内读取单首歌曲；`Player.QueuePosition()` 通过 `GetQueuePosition()` 在同一读锁内读取当前零基索引和总数。渲染组件使用这两个接口，避免为读取当前歌曲或计数调用会复制完整列表的 `Playlist()`。
 - **远程控制**：MPRIS(linux)、Now Playing(macOS)、System Media(Windows)。macOS 侧 `internal/macdriver/mediaplayer` 与 `internal/macdriver/cocoa/unnotifications.go` 的框架加载（Dlopen）失败不 panic 静默降级：MediaPlayer.framework 需 macOS 10.12.2+、UserNotifications.framework 需 10.14+，旧系统上 class 查找得 nil、objc 消息发送安全返回 0，对应功能（Now Playing 远程控制/系统通知）自动禁用而不影响主应用启动
 - **状态栏组件**：`model.DefaultStatusBar.Components` 可注入任意 `StatusBarComponent` 到居中区域；展示项只实现 `View`，可点击项额外实现 `InteractiveStatusBarComponent`，以自身局部坐标处理命中和事件。状态栏负责布局、边界与指针，不持有业务回调。播放队列适配器的 `musicfox` 前缀自行打开 `https://github.com/go-musicfox/go-musicfox`，队列位置与音质文本不触发。
 - **存储**：BoltDB，存储用户信息、播放状态、播放列表快照和桌面歌词窗口位置/显示器
@@ -208,6 +208,10 @@ type Player interface {
 
 1. 实现 `Update()` 和 `View()` 方法
 2. 在 `netease.go:Components()` 注册
+
+### 本地构建
+
+本地 `make build`、`make install` 和 macOS `make build-macapp` 将 `LDFLAGS` 传给对应平台构建脚本，默认 `-s -w` 以减小二进制体积；需要保留调试信息时使用 `make build LDFLAGS=`。Windows 通过 PowerShell `-Ldflags` 参数传递，Unix 通过环境变量传递。
 
 ### 更新依赖
 

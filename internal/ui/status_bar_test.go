@@ -23,6 +23,9 @@ func TestFormatQueueAndQualityIncludesMusicfox(t *testing.T) {
 	t.Cleanup(func() { configs.AppConfig = previousConfig })
 
 	player := &Player{playlistManager: playlist.NewPlaylistManager()}
+	if got := formatQueueAndQuality(player); got != "" {
+		t.Fatalf("empty queue status = %q, want empty", got)
+	}
 	player.InitSongManager(0, []structs.Song{{Id: 1}, {Id: 2}})
 
 	statusTextStyle := style.CurrentStyleSet().StatusBarText
@@ -30,6 +33,18 @@ func TestFormatQueueAndQualityIncludesMusicfox(t *testing.T) {
 		statusTextStyle.Render(" · [1/2] · 无损")
 	if got := formatQueueAndQuality(player); got != want {
 		t.Fatalf("formatQueueAndQuality() = %q, want %q", got, want)
+	}
+	if _, err := player.playlistManager.RemoveSong(0); err != nil {
+		t.Fatal(err)
+	}
+	want = statusTextStyle.Foreground(util.GetPrimaryColor()).Render("musicfox") +
+		statusTextStyle.Render(" · [1/1] · 无损")
+	if got := formatQueueAndQuality(player); got != want {
+		t.Fatalf("status after removing current song = %q, want %q", got, want)
+	}
+	player.InitSongManager(0, nil)
+	if got := formatQueueAndQuality(player); got != "" {
+		t.Fatalf("cleared queue status = %q, want empty", got)
 	}
 }
 

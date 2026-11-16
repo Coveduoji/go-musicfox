@@ -166,7 +166,7 @@ func (r *SongInfoRenderer) View(a *model.App, main *model.Main) (view string, li
 		addSegment("♥ ", icolor, false, heartBold)
 	}
 
-	if r.state.CurSongIndex() < len(r.state.Playlist()) {
+	if index, total := r.state.QueuePosition(); index >= 0 && index < total {
 		// 计算已占用的前缀宽度（实际 segment 宽度，而非估算的 prefixLen）
 		prefixUsedWidth := 0
 		for _, seg := range segments {

@@ -177,12 +177,11 @@ type songInfoTestState struct {
 }
 
 func (s songInfoTestState) CurSong() structs.Song     { return s.song }
-func (s songInfoTestState) CurSongIndex() int         { return 0 }
+func (s songInfoTestState) QueuePosition() (int, int) { return 0, 1 }
 func (s songInfoTestState) PassedTime() time.Duration { return 0 }
 func (s songInfoTestState) State() types.State        { return types.Paused }
 func (s songInfoTestState) Volume() int               { return 50 }
 func (s songInfoTestState) Mode() types.Mode          { return types.PmListLoop }
-func (s songInfoTestState) Playlist() []structs.Song  { return []structs.Song{s.song} }
 
 type progressTestState struct {
 	song   structs.Song
@@ -190,9 +189,8 @@ type progressTestState struct {
 }
 
 func (s progressTestState) CurSong() structs.Song     { return s.song }
-func (s progressTestState) CurSongIndex() int         { return 0 }
+func (s progressTestState) QueuePosition() (int, int) { return 0, 1 }
 func (s progressTestState) PassedTime() time.Duration { return s.passed }
 func (s progressTestState) State() types.State        { return types.Playing }
 func (s progressTestState) Volume() int               { return 50 }
 func (s progressTestState) Mode() types.Mode          { return types.PmListLoop }
-func (s progressTestState) Playlist() []structs.Song  { return []structs.Song{s.song} }

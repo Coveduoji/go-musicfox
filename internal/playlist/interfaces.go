@@ -20,6 +20,9 @@ type PlaylistManager interface {
 	// GetCurrentIndex 获取当前播放歌曲的索引
 	GetCurrentIndex() int
 
+	// GetQueuePosition returns the zero-based current index and total under one lock.
+	GetQueuePosition() (index, total int)
+
 	// GetCurrentSong 获取当前播放的歌曲
 	GetCurrentSong() (structs.Song, error)
 

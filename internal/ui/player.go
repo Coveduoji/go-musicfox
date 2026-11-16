@@ -60,12 +60,11 @@ const (
 // playerRendererState 提高 UI 渲染所需的歌曲信息
 type playerRendererState interface {
 	CurSong() structs.Song
-	CurSongIndex() int
+	QueuePosition() (index, total int)
 	PassedTime() time.Duration
 	State() types.State
 	Volume() int
 	Mode() types.Mode
-	Playlist() []structs.Song
 }
 
 // Player 网易云音乐播放器
@@ -344,12 +343,17 @@ func (p *Player) CurSongIndex() int {
 	return p.playlistManager.GetCurrentIndex()
 }
 
+// QueuePosition returns the zero-based current index and total without copying songs.
+func (p *Player) QueuePosition() (index, total int) {
+	return p.playlistManager.GetQueuePosition()
+}
+
 func (p *Player) CurSong() structs.Song {
-	index := p.CurSongIndex()
-	if index < 0 || len(p.Playlist()) <= index {
+	song, err := p.playlistManager.GetCurrentSong()
+	if err != nil {
 		return structs.Song{}
 	}
-	return p.Playlist()[index]
+	return song
 }
 
 // NextSong 下一曲
