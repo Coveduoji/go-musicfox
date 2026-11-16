@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-runewidth"
+	"github.com/muesli/reflow/truncate"
 	"github.com/muesli/termenv"
 	"math"
 	"slices"
@@ -152,6 +153,10 @@ func (m *Main) Update(msg tea.Msg, a *App) (Page, tea.Cmd) {
 			m.menuBottomRow = m.menuStartRow + m.menuPageSize + 1 // 1 for search bar
 		}
 
+		if m.menuStartColumn < 0 {
+			m.menuStartColumn = 0
+		}
+
 		// menu title satrt col, row
 		m.menuTitleStartColumn = m.menuStartColumn
 		if m.options.WhetherDisplayTitle && m.menuStartRow > 2 {
@@ -217,21 +222,53 @@ func (m *Main) View(a *App) string {
 	builder.WriteString("\n\n")
 	top += 2
 
-	// components view
+	var footer []string
+	for _, component := range m.components {
+		if bottom, ok := component.(BottomComponent); ok {
+			if v := bottom.ViewBottom(a, m); v != "" {
+				footer = append(footer, v)
+			}
+		}
+	}
+	footerView := strings.Join(footer, "\n")
+	footerRows := []string{}
+	if footerView != "" {
+		footerRows = strings.Split(footerView, "\n")
+	}
+	if len(footerRows) > windowHeight {
+		footerRows = footerRows[len(footerRows)-windowHeight:]
+	}
+	bodyHeight := windowHeight - len(footerRows)
 	for _, component := range m.components {
 		if component == nil {
 			continue
 		}
-		view, lines := component.View(a, m)
-		builder.WriteString(view)
-		top += lines
+		if _, ok := component.(BottomComponent); ok {
+			continue
+		}
+		if flexible, ok := component.(FlexibleComponent); ok {
+			available := bodyHeight - strings.Count(builder.String(), "\n")
+			if available < 0 {
+				available = 0
+			}
+			builder.WriteString(flexible.ViewWithSize(a, m, windowWidth, available))
+		} else {
+			view, _ := component.View(a, m)
+			builder.WriteString(view)
+		}
 	}
-
-	if top < windowHeight {
-		builder.WriteString(strings.Repeat("\n", windowHeight-top-1))
+	bodyRows := strings.Split(builder.String(), "\n")
+	if len(bodyRows) > bodyHeight {
+		bodyRows = bodyRows[:bodyHeight]
 	}
-
-	return builder.String()
+	for len(bodyRows) < bodyHeight {
+		bodyRows = append(bodyRows, "")
+	}
+	rows := append(bodyRows, footerRows...)
+	for i, row := range rows {
+		rows[i] = truncate.StringWithTail(row, uint(windowWidth), "")
+	}
+	return strings.Join(rows, "\n")
 }
 
 func (m *Main) MenuTitleStartColumn() int {

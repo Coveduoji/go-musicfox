@@ -733,3 +733,8 @@ func RotateImageFast(src *image.RGBA, angle float64, dst *image.RGBA) {
 		}
 	}
 }
+
+// ResizeImageSquare reuses the cover cache's square resampling for compact native images.
+func ResizeImageSquare(src image.Image, targetSize int) image.Image {
+	return resizeImageSquare(src, targetSize)
+}

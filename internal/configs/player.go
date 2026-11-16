@@ -25,6 +25,9 @@ type PlayerConfig struct {
 	// 显示歌单下所有歌曲
 	ShowAllSongsOfPlaylist bool `koanf:"showAllSongsOfPlaylist"`
 
+	// MouseVolumeEnabled controls both plain and Ctrl-modified wheel volume events.
+	MouseVolumeEnabled bool `koanf:"mouseVolumeEnabled"`
+
 	// 鼠标滚轮单次滚动调节的音量值 (取值范围 1-20)
 	MouseVolumeStep int `koanf:"mouseVolumeStep"`
 

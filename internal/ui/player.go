@@ -135,8 +135,8 @@ func NewPlayer(n *Netease, lyricService *lyric.Service) *Player {
 				return
 			case s := <-p.StateChan():
 				p.stateHandler.SetPlayingInfo(p.PlayingInfo())
+				p.netease.Rerender(false)
 				if s != types.Stopped {
-					p.netease.Rerender(false)
 					break
 				}
 				p.NextSong(false)
@@ -158,14 +158,13 @@ func NewPlayer(n *Netease, lyricService *lyric.Service) *Player {
 
 				p.lyricService.UpdatePosition(duration)
 
-				if p.renderTicker != nil {
+				if p.renderTicker != nil && !p.renderTicker.IsReactive() {
 					select {
 					case p.renderTicker.c <- time.Now():
 					default:
 					}
+					p.netease.Rerender(false)
 				}
-
-				p.netease.Rerender(false)
 			}
 		}
 	})
@@ -681,4 +680,21 @@ func modeToLoopStatusAndShuffle(mode types.Mode) (loopStatus string, shuffle boo
 
 func (p *Player) RenderTicker() model.Ticker {
 	return p.renderTicker
+}
+
+// Spectrum exposes the engine's optional PCM analysis without extending Player.
+func (p *Player) Spectrum() player.SpectrumFrame {
+	if provider, ok := p.Player.(player.SpectrumProvider); ok {
+		return provider.Spectrum()
+	}
+	return player.SpectrumFrame{}
+}
+
+func (p *Player) SetSpectrumEnabled(enabled bool) {
+	if controller, ok := p.Player.(player.SpectrumController); ok {
+		controller.SetSpectrumEnabled(enabled)
+	}
+	if p.renderTicker != nil {
+		p.renderTicker.SetEnabled(enabled)
+	}
 }

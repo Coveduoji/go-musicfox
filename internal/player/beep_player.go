@@ -52,7 +52,9 @@ type beepPlayer struct {
 	musicChan  chan URLMusic
 	httpClient *http.Client
 
-	close chan struct{}
+	close           chan struct{}
+	spectrum        *spectrumAnalyzer
+	spectrumEnabled bool
 }
 
 func NewBeepPlayer() *beepPlayer {
@@ -72,6 +74,9 @@ func NewBeepPlayer() *beepPlayer {
 		httpClient: &http.Client{},
 		close:      make(chan struct{}),
 	}
+
+	p.spectrum = newSpectrumAnalyzer(int(sampleRate))
+	p.spectrumEnabled = configs.AppConfig.SpectrumEnabled()
 
 	errorx.WaitGoStart(p.listen)
 
@@ -113,6 +118,7 @@ func (p *beepPlayer) listen() {
 		case p.curMusic = <-p.musicChan:
 			p.l.Lock()
 			p.pausedNoLock()
+			p.spectrum.SetActive(false)
 			if p.timer != nil {
 				p.timer.SetPassed(0)
 			}
@@ -204,7 +210,7 @@ func (p *beepPlayer) listen() {
 
 			p.ctrl.Streamer = beep.Seq(p.resampleStreamer(p.curFormat.SampleRate), beep.Callback(doneHandle))
 			p.volume.Streamer = p.ctrl
-			speaker.Play(p.volume)
+			speaker.Play(&spectrumTap{source: p.volume, analyzer: p.spectrum})
 
 			// 计时器
 			p.timer = timex.NewTimer(timex.Options{
@@ -310,6 +316,7 @@ func (p *beepPlayer) Seek(duration time.Duration) {
 		if p.timer != nil {
 			p.timer.SetPassed(duration)
 		}
+		p.spectrum.SetActive(p.state == types.Playing && p.spectrumEnabled)
 		speaker.Unlock()
 	}
 }
@@ -366,6 +373,7 @@ func (p *beepPlayer) pausedNoLock() {
 		return
 	}
 	p.ctrl.Paused = true
+	p.spectrum.SetActive(false)
 	p.timer.Pause()
 	p.setState(types.Paused)
 }
@@ -381,6 +389,7 @@ func (p *beepPlayer) resumeNoLock() {
 	if p.state == types.Playing {
 		return
 	}
+	p.spectrum.SetActive(p.spectrumEnabled)
 	p.ctrl.Paused = false
 	go p.timer.Run()
 	p.setState(types.Playing)
@@ -398,6 +407,7 @@ func (p *beepPlayer) stopNoLock() {
 		return
 	}
 	p.ctrl.Paused = true
+	p.spectrum.SetActive(false)
 	p.timer.Pause()
 	p.setState(types.Stopped)
 }
@@ -432,6 +442,7 @@ func (p *beepPlayer) Close() {
 	close(p.close)
 	speaker.Clear()
 	speaker.Close()
+	p.spectrum.Close()
 }
 
 func (p *beepPlayer) reset() {
@@ -491,4 +502,14 @@ func (p *beepPlayer) resampleStreamer(old beep.SampleRate) beep.Streamer {
 		return beep.StreamerFunc(p.streamer)
 	}
 	return beep.Resample(resampleQuiality, old, sampleRate, beep.StreamerFunc(p.streamer))
+}
+
+func (p *beepPlayer) Spectrum() SpectrumFrame { return p.spectrum.Snapshot() }
+
+// SetSpectrumEnabled changes analysis without restarting the audio stream.
+func (p *beepPlayer) SetSpectrumEnabled(enabled bool) {
+	p.l.Lock()
+	defer p.l.Unlock()
+	p.spectrumEnabled = enabled
+	p.spectrum.SetActive(enabled && p.state == types.Playing)
 }

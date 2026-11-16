@@ -49,10 +49,13 @@ type Netease struct {
 
 	lyricService *lyric.Service
 
-	lyricRenderer    *LyricRenderer
-	songInfoRenderer *SongInfoRenderer
-	progressRenderer *ProgressRenderer
-	coverRenderer    *CoverRenderer
+	lyricRenderer       *LyricRenderer
+	songInfoRenderer    *SongInfoRenderer
+	progressRenderer    *ProgressRenderer
+	coverRenderer       *CoverRenderer
+	nowPlayingRenderer  *NowPlayingRenderer
+	playbackBarRenderer *PlaybackBarRenderer
+	playbarBounds       []playbarBound
 
 	player       *Player
 	shareSvc     *composer.ShareService
@@ -86,6 +89,8 @@ func NewNetease(app *model.App) *Netease {
 	n.songInfoRenderer = NewSongInfoRenderer(n, n.player)
 	n.progressRenderer = NewProgressRenderer(n, n.player)
 	n.coverRenderer = NewCoverRenderer(n, n.player)
+	n.nowPlayingRenderer = NewNowPlayingRenderer(n, n.player)
+	n.playbackBarRenderer = NewPlaybackBarRenderer(n, n.player)
 
 	n.login = NewLoginPage(n)
 	n.search = NewSearchPage(n)
@@ -98,24 +103,14 @@ func NewNetease(app *model.App) *Netease {
 }
 
 func (n *Netease) Components() []model.Component {
-	// CoverRenderer uses absolute positioning and returns 0 lines,
-	// so it doesn't affect the layout of other components.
-	// It should be rendered LAST to overlay the cover image after normal layout.
+	if configs.AppConfig.Main.Lyric.Layout == "adaptive" {
+		return []model.Component{n.nowPlayingRenderer, n.playbackBarRenderer}
+	}
+	components := []model.Component{n.lyricRenderer, n.songInfoRenderer, n.progressRenderer}
 	if n.coverRenderer.IsEnabled() {
-		return []model.Component{
-			n.lyricRenderer,
-			n.songInfoRenderer,
-			n.progressRenderer,
-			n.coverRenderer,
-		}
+		components = append(components, n.coverRenderer)
 	}
-
-	// Default: just lyrics without cover
-	return []model.Component{
-		n.lyricRenderer,
-		n.songInfoRenderer,
-		n.progressRenderer,
-	}
+	return components
 }
 
 // ToLoginPage 需要登录的处理
@@ -371,6 +366,12 @@ func (n *Netease) InitHook(_ *model.App) {
 }
 
 func (n *Netease) CloseHook(_ *model.App) {
+	if n.playbackBarRenderer != nil {
+		n.playbackBarRenderer.Hide()
+	}
+	if n.nowPlayingRenderer != nil {
+		n.nowPlayingRenderer.Close()
+	}
 	_ = n.player.Close()
 	n.lastfm.Close()
 

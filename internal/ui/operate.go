@@ -174,10 +174,7 @@ func likeSong(n *Netease, isLike bool, isSelected bool) model.Page {
 			return nil
 		}
 
-		go func() {
-			likelist.RefreshLikeList(n.user.UserId)
-			n.Rerender(false)
-		}()
+		likelist.SetLikeSong(song.Id, isLike)
 
 		title := "已添加到我喜欢的歌曲"
 		if !isLike {

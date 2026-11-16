@@ -115,3 +115,16 @@ release-debug-shell:
 		-w /go/src/$(PACKAGE_NAME) \
     	--entrypoint="/bin/bash" \
     	$(GORELEASER_IMAGE)
+
+# Reapply the local layout extension after regenerating vendor (portable Git command).
+.PHONY: vendor-patch
+vendor-patch:
+	git apply --directory=vendor/github.com/anhoder/foxful-cli patches/foxful-cli-fixed-footer.patch
+
+# Go and Git commands also work in Windows shells.
+.PHONY: vendor
+vendor:
+	go mod tidy
+	go mod vendor
+	go run github.com/goware/modvendor@v0.5.0 -copy="**/*.h **/*.c" -v
+	$(MAKE) vendor-patch

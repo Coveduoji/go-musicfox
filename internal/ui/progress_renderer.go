@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/anhoder/foxful-cli/model"
 	"github.com/anhoder/foxful-cli/util"
@@ -47,6 +48,12 @@ func (r *ProgressRenderer) getRenderMode() progressRenderMode {
 }
 
 // View renders the progress bar component.
+// ViewBottom anchors the seek bar at the final terminal row.
+func (r *ProgressRenderer) ViewBottom(a *model.App, main *model.Main) string {
+	v, _ := r.View(a, main)
+	return truncatePlayingText(v, a.WindowWidth(), "")
+}
+
 func (r *ProgressRenderer) View(a *model.App, main *model.Main) (view string, lines int) {
 	song := r.state.CurSong()
 	allDuration := int(song.Duration.Seconds())
@@ -61,6 +68,29 @@ func (r *ProgressRenderer) View(a *model.App, main *model.Main) (view string, li
 		displayDuration = allDuration
 	}
 
+	progressView := r.renderBar(max(0, r.netease.WindowWidth()-14))
+
+	var times string
+	if allDuration/60 >= 100 {
+		times = fmt.Sprintf("%03d:%02d/%03d:%02d", displayDuration/60, displayDuration%60, allDuration/60, allDuration%60)
+	} else {
+		times = fmt.Sprintf("%02d:%02d/%02d:%02d", displayDuration/60, displayDuration%60, allDuration/60, allDuration%60)
+	}
+	styledTimes := util.SetFgStyle(times, util.GetPrimaryColor())
+
+	if allDuration/60 >= 100 {
+		return progressView + " " + styledTimes, 1
+	}
+	return progressView + " " + styledTimes + " ", 1
+}
+
+// renderBar shares the configured progress animation with the centered footer.
+func (r *ProgressRenderer) renderBar(width int) string {
+	allDuration := max(0, int(r.state.CurSong().Duration.Seconds()))
+	passedDuration := max(0, int(r.state.PassedTime().Seconds()))
+	if allDuration == 0 {
+		return strings.Repeat("─", max(0, width))
+	}
 	var progressPct int
 	if passedDuration > allDuration {
 		progressPct = 100
@@ -69,10 +99,7 @@ func (r *ProgressRenderer) View(a *model.App, main *model.Main) (view string, li
 	}
 	progress := float64(progressPct) / 100.0
 
-	width := r.netease.WindowWidth() - 14
-	if width < 0 {
-		width = 0
-	}
+	width = max(0, width)
 	fullSize := int(math.Round(float64(width) * progress))
 
 	progressOptions := configs.AppConfig.Theme.Progress.ToModel()
@@ -95,16 +122,5 @@ func (r *ProgressRenderer) View(a *model.App, main *model.Main) (view string, li
 		progressView = model.Progress(&progressOptions, width, fullSize, r.progressRamp)
 	}
 
-	var times string
-	if allDuration/60 >= 100 {
-		times = fmt.Sprintf("%03d:%02d/%03d:%02d", displayDuration/60, displayDuration%60, allDuration/60, allDuration%60)
-	} else {
-		times = fmt.Sprintf("%02d:%02d/%02d:%02d", displayDuration/60, displayDuration%60, allDuration/60, allDuration%60)
-	}
-	styledTimes := util.SetFgStyle(times, util.GetPrimaryColor())
-
-	if allDuration/60 >= 100 {
-		return progressView + " " + styledTimes, 1
-	}
-	return progressView + " " + styledTimes + " ", 1
+	return progressView
 }

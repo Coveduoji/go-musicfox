@@ -50,6 +50,11 @@ func TransmitImage(img image.Image, cols, rows int, imageID uint32) (string, err
 	return transmit(img, cols, rows, imageID, "t", 0)
 }
 
+// TransmitImageWithEncoder lets frequent small images reuse PNG encoder buffers.
+func TransmitImageWithEncoder(img image.Image, imageID uint32, encoder *png.Encoder) (string, error) {
+	return transmitWithEncoder(img, 0, 0, imageID, "t", 0, encoder)
+}
+
 // DeleteImage deletes an image by its ID.
 func DeleteImage(imageID uint32) string {
 	// a=d: delete action
@@ -100,9 +105,16 @@ func Placeholder(cols, rows int) string {
 // splitIntoChunks splits a string into chunks of the specified size.
 // transmit handles the common logic for transmitting image data.
 func transmit(img image.Image, cols, rows int, imageID uint32, action string, gapMS int) (string, error) {
+	return transmitWithEncoder(img, cols, rows, imageID, action, gapMS, nil)
+}
+func transmitWithEncoder(img image.Image, cols, rows int, imageID uint32, action string, gapMS int, encoder *png.Encoder) (string, error) {
 	// Encode image to PNG
 	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
+	encode := png.Encode
+	if encoder != nil {
+		encode = encoder.Encode
+	}
+	if err := encode(&buf, img); err != nil {
 		return "", fmt.Errorf("failed to encode image to PNG: %w", err)
 	}
 
@@ -205,6 +217,9 @@ func PlaceImage(imageID uint32, cols, rows int) string {
 	// If rows is 0, let Kitty calculate height based on image aspect ratio (square) and cols
 	if rows == 0 {
 		return fmt.Sprintf("%sa=p,i=%d,c=%d,C=1,q=2%s", apcStart, imageID, cols, st)
+	}
+	if cols == 0 {
+		return fmt.Sprintf("%sa=p,i=%d,r=%d,C=1,q=2%s", apcStart, imageID, rows, st)
 	}
 	return fmt.Sprintf("%sa=p,i=%d,c=%d,r=%d,C=1,q=2%s", apcStart, imageID, cols, rows, st)
 }

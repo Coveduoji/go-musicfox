@@ -385,6 +385,10 @@ golang.org/x/text/runes
 golang.org/x/text/transform
 golang.org/x/text/unicode/norm
 golang.org/x/text/width
+# gonum.org/v1/gonum v0.16.0
+## explicit; go 1.23.0
+gonum.org/v1/gonum/dsp/fourier
+gonum.org/v1/gonum/dsp/fourier/internal/fftpack
 # gopkg.in/errgo.v1 v1.0.1
 ## explicit
 gopkg.in/errgo.v1

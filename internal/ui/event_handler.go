@@ -9,7 +9,6 @@ import (
 
 	"github.com/anhoder/foxful-cli/model"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/mattn/go-runewidth"
 
 	"github.com/go-musicfox/go-musicfox/internal/configs"
 	"github.com/go-musicfox/go-musicfox/internal/keybindings"
@@ -325,6 +324,17 @@ func (h *EventHandler) MouseMsgHandle(msg tea.MouseMsg, a *model.App) (stopPropa
 		return false, nil, nil
 	}
 
+	if configs.AppConfig.Main.Lyric.Layout == "adaptive" && h.netease.playbackBarRenderer != nil && msg.Button == tea.MouseButtonLeft {
+		if msg.Action == tea.MouseActionPress || msg.Action == tea.MouseActionMotion {
+			if hit := h.netease.playbackBarRenderer.hit(msg.X, msg.Y); hit != nil {
+				return h.handleAdaptivePlayback(msg, hit, a, main)
+			}
+		}
+		if msg.Y >= a.WindowHeight()-playbackFooterHeight(a.WindowWidth(), a.WindowHeight()) {
+			return true, main, nil
+		}
+	}
+
 	switch msg.Button {
 	case tea.MouseButtonLeft:
 		// Handle play mode click
@@ -388,7 +398,7 @@ func (h *EventHandler) MouseMsgHandle(msg tea.MouseMsg, a *model.App) (stopPropa
 		if slices.Contains([]tea.MouseAction{tea.MouseActionPress, tea.MouseActionMotion}, msg.Action) {
 			x, y := msg.X, msg.Y
 			progressBarWidth := a.WindowWidth() - 14
-			if y+1 == a.WindowHeight() && x+1 <= progressBarWidth {
+			if y+1 == a.WindowHeight() && x >= 0 && progressBarWidth > 0 && x < progressBarWidth {
 				allDuration := int(player.CurMusic().Duration.Seconds())
 				if allDuration == 0 {
 					return true, main, nil
@@ -402,6 +412,9 @@ func (h *EventHandler) MouseMsgHandle(msg tea.MouseMsg, a *model.App) (stopPropa
 			}
 		}
 	case tea.MouseButtonWheelDown:
+		if !configs.AppConfig.Player.MouseVolumeEnabled {
+			return true, main, nil
+		}
 		if msg.Ctrl {
 			currentVolume := player.Volume()
 			newVolume := max(currentVolume-h.mouseVolumeStep, 0)
@@ -410,6 +423,9 @@ func (h *EventHandler) MouseMsgHandle(msg tea.MouseMsg, a *model.App) (stopPropa
 			player.DownVolume()
 		}
 	case tea.MouseButtonWheelUp:
+		if !configs.AppConfig.Player.MouseVolumeEnabled {
+			return true, main, nil
+		}
 		if msg.Ctrl {
 			currentVolume := player.Volume()
 			newVolume := min(currentVolume+h.mouseVolumeStep, 100)
@@ -444,6 +460,9 @@ func (h *EventHandler) MouseMsgHandle(msg tea.MouseMsg, a *model.App) (stopPropa
 			return true, main, a.Tick(time.Nanosecond)
 		}
 	case tea.MouseButtonRight:
+		if configs.AppConfig.Main.Lyric.Layout == "adaptive" && msg.Y >= a.WindowHeight()-playbackFooterHeight(a.WindowWidth(), a.WindowHeight()) {
+			return true, main, nil
+		}
 		// 鼠标右键：根据点击位置判断是菜单还是歌曲信息区域
 		if msg.Action == tea.MouseActionPress {
 			// 歌曲信息行：等同于对“当前播放”按 m
@@ -596,116 +615,77 @@ func (h *EventHandler) getClickedIndexFromPosition(msg tea.MouseMsg, a *model.Ap
 	return clickedIndex, true
 }
 
-// handlePlayerBarClick 处理播放栏点击事件
+// handlePlayerBarClick uses the exact clipped text bounds from the renderer.
 func (h *EventHandler) handlePlayerBarClick(msg tea.MouseMsg, a *model.App, main *model.Main) (bool, model.Page, tea.Cmd) {
-	playModeRow := a.WindowHeight() - 3
-	if msg.Y != playModeRow {
+	row := a.WindowHeight() - 3
+	if h.netease.player.CurSong().Duration <= 0 {
+		row++
+	}
+	if msg.Y != row {
 		return false, nil, nil
 	}
-
-	// 播放模式点击
-	if handled, page, cmd := h.handlePlayModeClick(msg, a, main); handled {
-		return handled, page, cmd
-	}
-
-	// 播放栏其他元素点击
-	return h.handlePlayerBarElementsClick(msg, a, main)
-}
-
-// handlePlayModeClick 播放模式点击
-func (h *EventHandler) handlePlayModeClick(msg tea.MouseMsg, a *model.App, main *model.Main) (bool, model.Page, tea.Cmd) {
-	player := h.netease.player
-	menuStartColumn := main.MenuStartColumn()
-
-	if menuStartColumn > 4 {
-		playModeEndX := menuStartColumn + 5
-		if msg.X >= menuStartColumn-4 && msg.X <= playModeEndX {
-			player.SwitchMode()
-			return true, main, a.Tick(time.Nanosecond)
+	for _, bound := range h.netease.playbarBounds {
+		if msg.X < bound.start || msg.X >= bound.end {
+			continue
 		}
+		switch bound.action {
+		case "mode":
+			h.netease.player.SwitchMode()
+		case "state":
+			h.playOrToggleHandle()
+		case "heart":
+			return true, likeSong(h.netease, !likelist.IsLikeSong(h.netease.player.CurSong().Id), false), a.Tick(time.Nanosecond)
+		case "song":
+			action(h.netease, true)
+		case "artist":
+			goToArtistOfSong(h.netease, false)
+		default:
+			return false, nil, nil
+		}
+		return true, main, a.Tick(time.Nanosecond)
 	}
 	return false, nil, nil
 }
 
-// handlePlayerBarElementsClick 播放栏其他元素点击
-func (h *EventHandler) handlePlayerBarElementsClick(msg tea.MouseMsg, a *model.App, main *model.Main) (bool, model.Page, tea.Cmd) {
+// handleAdaptivePlayback reuses the keyboard actions and player APIs.
+func (h *EventHandler) handleAdaptivePlayback(msg tea.MouseMsg, hit *playbackHit, a *model.App, main *model.Main) (bool, model.Page, tea.Cmd) {
 	player := h.netease.player
-	curSong := player.CurSong()
-
-	if curSong.Id == 0 {
-		return false, nil, nil
-	}
-
-	menuStartColumn := main.MenuStartColumn()
-	leftPad := 0
-	if !main.CenterEverything() && menuStartColumn-4 > 0 {
-		leftPad = menuStartColumn - 4
-	}
-
-	currentX := leftPad
-
-	// Mode & Volume 宽度
-	if menuStartColumn-4 > 0 {
-		modeStr := fmt.Sprintf("[%s] ", player.Mode().Name())
-		modeWidth := runewidth.StringWidth(modeStr)
-		volStr := fmt.Sprintf("%d%% ", player.Volume())
-		volWidth := runewidth.StringWidth(volStr)
-		currentX += modeWidth + volWidth
-	}
-
-	// 播放状态
-	stateText := "_ z Z Z "
-	if player.State() == types.Playing {
-		stateText = "♫ ♪ ♫ ♪ "
-	}
-	stateWidth := runewidth.StringWidth(stateText)
-
-	if msg.X >= currentX && msg.X < currentX+stateWidth {
-		h.playOrToggleHandle()
+	if hit.action == "seek" {
+		duration := player.CurSong().Duration
+		if duration > 0 && hit.width > 0 {
+			fraction := float64(msg.X-hit.x) / float64(max(1, hit.width-1))
+			player.Seek(time.Duration(fraction * float64(duration)))
+		}
 		return true, main, a.Tick(time.Nanosecond)
 	}
-	currentX += stateWidth
-
-	// 喜欢状态
-	heartWidth := 0
-	if curSong.Id > 0 {
-		_ = likelist.IsLikeSong(curSong.Id)
-		heartWidth = runewidth.StringWidth("♥ ")
-	}
-	if heartWidth > 0 {
-		if msg.X >= currentX && msg.X < currentX+heartWidth {
-			isLiked := likelist.IsLikeSong(curSong.Id)
-			newPage := likeSong(h.netease, !isLiked, false)
-			return true, newPage, a.Tick(time.Nanosecond)
-		}
-		currentX += heartWidth
-	}
-
-	// 歌曲名
-	songName := curSong.Name
-	songShownWidth := runewidth.StringWidth(songName)
-	if !main.CenterEverything() {
-		prefixLen := 10
-		if main.MenuStartColumn()-4 > 0 {
-			prefixLen += 12
-		}
-		maxSongWidth := a.WindowWidth() - main.MenuStartColumn() - prefixLen
-		if songShownWidth > maxSongWidth {
-			songShownWidth = maxSongWidth
-		}
-	}
-
-	if msg.X >= currentX && msg.X < currentX+songShownWidth {
-		action(h.netease, true)
+	if hit.action == "volume" {
+		volume := float64(msg.X-hit.x) * 100 / float64(max(1, hit.width-1))
+		player.SetVolume(max(0, min(100, int(volume))))
 		return true, main, a.Tick(time.Nanosecond)
 	}
-	currentX += songShownWidth + 1
-
-	// 歌手
-	if msg.X >= currentX {
-		goToArtistOfSong(h.netease, false)
-		return true, main, a.Tick(time.Nanosecond)
+	if msg.Action != tea.MouseActionPress {
+		return true, main, nil
 	}
-
-	return false, nil, nil
+	switch hit.action {
+	case "previous":
+		return h.handle(keybindings.OpPrevious)
+	case "next":
+		return h.handle(keybindings.OpNext)
+	case "mode":
+		return h.handle(keybindings.OpSwitchPlayMode)
+	case "state":
+		return h.handle(keybindings.OpToggle)
+	case "queue":
+		return h.handle(keybindings.OpCurPlaylist)
+	case "heart":
+		return true, likeSong(h.netease, !likelist.IsLikeSong(player.CurSong().Id), false), a.Tick(time.Nanosecond)
+	case "spectrum":
+		bar := h.netease.playbackBarRenderer
+		bar.SetSpectrumEnabled(!bar.spectrumEnabled)
+	case "volumeUp":
+		player.UpVolume()
+	case "volumeDown":
+		player.DownVolume()
+	}
+	return true, main, a.Tick(time.Nanosecond)
 }

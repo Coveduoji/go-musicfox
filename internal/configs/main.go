@@ -43,10 +43,21 @@ type MainConfig struct {
 	// 播放时 UI 刷新帧率
 	FrameRate FrameRate `koanf:"frameRate"`
 
+	Visualizer   VisualizerConfig   `koanf:"visualizer"`
 	Notification NotificationConfig `koanf:"notification"`
 	Lyric        LyricConfig        `koanf:"lyric"`
 	Pprof        PprofConfig        `koanf:"pprof"`
 	Account      AccountConfig      `koanf:"account"`
+}
+
+// VisualizerConfig controls the optional PCM spectrum in the adaptive footer.
+type VisualizerConfig struct {
+	Enable bool `koanf:"enable"`
+}
+
+// SpectrumEnabled excludes layouts that cannot display the spectrum.
+func (cfg *Config) SpectrumEnabled() bool {
+	return cfg.Main.Visualizer.Enable && cfg.Main.Lyric.Layout == "adaptive"
 }
 
 // NotificationConfig 桌面通知相关设置
@@ -61,6 +72,8 @@ type NotificationConfig struct {
 
 // LyricConfig 歌词显示相关设置
 type LyricConfig struct {
+	// Layout selects adaptive original covers or the classic layout.
+	Layout string `koanf:"layout"`
 	// 显示歌词
 	Show bool `koanf:"show"`
 	// 显示歌词翻译

@@ -22,9 +22,23 @@ func IsLikeSong(songId int64) bool {
 	return ok
 }
 
+// SetLikeSong updates the local state only after the server confirms the change.
+func SetLikeSong(songID int64, liked bool) {
+	mu.Lock()
+	defer mu.Unlock()
+	if liked {
+		likeList[songID] = struct{}{}
+	} else {
+		delete(likeList, songID)
+	}
+}
+
 func RefreshLikeList(userId int64) {
 	s := &service.LikeListService{UID: strconv.FormatInt(userId, 10)}
-	_, resp := s.LikeList()
+	code, resp := s.LikeList()
+	if code != 200 {
+		return
+	}
 
 	mu.Lock()
 	defer mu.Unlock()

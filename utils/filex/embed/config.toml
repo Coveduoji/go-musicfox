@@ -28,9 +28,22 @@ altScreen = true
 enableMouseEvent = true
 # 是否开启 Debug 模式
 debug = false
-# 播放时 UI 刷新帧率（更高帧率可使动画更平滑，但消耗更多cpu）
+# 常规播放刷新/计时间隔，单位 FPS；建议 5，越高占用越大
+# 开启下方频谱时，其界面固定以 10Hz 刷新，不需要调高此值
 frameRate = 5
 
+
+# 底栏真实音频频谱（修改后重启生效）
+[main.visualizer]
+# 启动默认值：true 开启，false 关闭；音符按钮可即时切换当前会话，歌词保持显示
+# 关闭后停止采样分析及 10Hz timer；首次开启时才启动 FFT worker
+# 仅 layout="adaptive" 且使用 Beep 引擎时有效；Linux 的 auto 默认使用 Beep
+# 24 个分析频段插值为满宽白色细柱，柱间留空，线下有暗色短倒影
+# 分割线以关闭时的位置为固定基准；Kitty 在同一图层绘制柱体、细线与倒影
+# 预留三行，开关不改变主区、分割线或控件坐标；窗口小于 32 列或 20 行时隐藏频谱
+# 后台最多分析 20 次/秒，界面最多刷新 10 次/秒；不会重复传输封面
+# 无 PCM 接口的其他引擎显示静态分隔线；Kitty 和 GNOME Terminal 均可显示频谱
+enable = true
 
 # 桌面通知相关设置
 [main.notification]
@@ -43,6 +56,9 @@ albumCover = false
 
 # 歌词显示相关设置
 [main.lyric]
+# adaptive：宽窗口左右排列，窄窗口封面在上、歌词在下；底栏固定于窗口底部
+# classic：使用 v4.8.5 原布局，不显示底栏频谱
+layout = "adaptive"
 # 是否显示歌词
 show = true
 # 是否显示翻译歌词
@@ -57,9 +73,10 @@ renderMode = "smooth"
 
 # 封面图显示设置（需要支持Kitty图形协议的终端，如Kitty、WezTerm、Ghostty等）
 [main.lyric.cover]
-# 是否显示封面图
+# classic 布局的封面开关；adaptive 在支持 Kitty 图形协议时自动显示小尺寸原图
 show = false
-# 封面图宽度占窗口宽度的比例（取值范围 0.1-0.8，默认 0.3）
+# 以下大小、圆角与旋转设置仅用于 classic；adaptive 使用静态小封面以降低占用
+# classic 封面宽度占窗口比例（0.1-0.8）；adaptive 宽屏与右侧歌名/歌词区等高、上下对齐；窄屏最多 10 行，均等比显示
 widthRatio = 0.1
 # 封面图圆角半径百分比（取值范围 0-100，默认 8 即 8%，0 则关闭，越大越圆）
 cornerRadius = 8
@@ -105,12 +122,12 @@ primaryColor = "#ea403f" # 经典网易云音乐红
 # 进度条渲染模式
 # 可选: "smooth"(平滑，默认), "wave"(波浪), "glow"(发光)
 renderMode = "smooth"
-# 进度条已加载字符
+# 已播放部分的字符（按终端等宽字体渲染）
 fullChar = "#"
 fullCharWhenFirst = "#"
 fullCharWhenLast = "#"
 lastFullChar = "#"
-# 进度条未加载字符
+# 未播放部分的字符
 emptyChar = "·"
 emptyCharWhenFirst = "·"
 emptyCharWhenLast = "·"
@@ -160,6 +177,8 @@ songLevel = "higher"
 # 是否获取并显示歌单下的所有歌曲，默认前 1000 首
 # 开启后可能会占用更多内存（大量歌曲数据）和带宽（会同时发送多个请求获取歌单下歌曲数据）
 showAllSongsOfPlaylist = false
+# 是否允许滚轮调节音量（包括 Ctrl + 滚轮）；false 关闭，修改后重启生效
+mouseVolumeEnabled = true
 # Ctrl + 鼠标滚轮单次滚动调节的音量值 (取值范围 1-20)
 mouseVolumeStep = 1
 

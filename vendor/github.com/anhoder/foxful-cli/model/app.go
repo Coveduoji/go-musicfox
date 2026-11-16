@@ -9,6 +9,8 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
+type invalidateComponentsMsg struct{}
+
 type App struct {
 	windowWidth  int
 	windowHeight int
@@ -94,6 +96,15 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Make sure these keys always quit
 	switch msgWithType := msg.(type) {
+	case invalidateComponentsMsg:
+		if a.main != nil {
+			for _, component := range a.main.components {
+				if invalid, ok := component.(InvalidatingComponent); ok {
+					invalid.Invalidate()
+				}
+			}
+		}
+		return a, nil
 	case tea.KeyMsg:
 		var k = msgWithType.String()
 		if k != "q" && k != "Q" && k != "ctrl+c" {
@@ -111,6 +122,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	page, cmd := a.page.Update(msg, a)
+	if a.main != nil && a.page == a.main && page != a.main {
+		for _, component := range a.main.components {
+			if hiding, ok := component.(HidingComponent); ok {
+				hiding.Hide()
+			}
+		}
+	}
 	a.page = page
 	return a, cmd
 }
@@ -158,6 +176,7 @@ func (a *App) RerenderCmd(cleanScreen bool) tea.Cmd {
 	return func() tea.Msg {
 		if cleanScreen {
 			a.program.Send(tea.ClearScreen())
+			a.program.Send(invalidateComponentsMsg{})
 		}
 		return a.page.Msg()
 	}
