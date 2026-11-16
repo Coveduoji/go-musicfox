@@ -558,6 +558,9 @@ func (h *EventHandler) handleDoubleClick(msg tea.MouseMsg, a *model.App, main *m
 
 // getClickedIndexFromPosition 根据鼠标位置计算点击的菜单项索引
 func (h *EventHandler) getClickedIndexFromPosition(msg tea.MouseMsg, a *model.App, main *model.Main) (int, bool) {
+	if configs.AppConfig.Theme.MenuColumns > 0 {
+		return main.MenuIndexAt(msg.X, msg.Y)
+	}
 	menu := main.CurMenu()
 	menuViews := menu.MenuViews()
 

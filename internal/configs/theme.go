@@ -24,6 +24,8 @@ type ThemeConfig struct {
 	LoadingText string `koanf:"loadingText"`
 	// 是否双列显示
 	DoubleColumn bool `koanf:"doubleColumn"`
+	// MenuColumns selects a responsive 1-3 column grid; 0 preserves the legacy layout.
+	MenuColumns int `koanf:"menuColumns"`
 	// 菜单行数动态变更
 	DynamicMenuRows bool `koanf:"dynamicMenuRows"`
 	// 界面全部居中

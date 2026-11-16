@@ -1,0 +1,2 @@
+# Patch context markers intentionally precede tabs and blank lines.
+patches/*.patch whitespace=-blank-at-eol,-space-before-tab

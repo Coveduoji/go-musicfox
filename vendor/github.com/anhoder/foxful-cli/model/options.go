@@ -16,6 +16,7 @@ type Options struct {
 	LoadingText         string
 	PrimaryColor        string
 	DualColumn          bool // The menu list is displayed as a dual column
+	MenuColumns         int  // 0 preserves DualColumn; 1-3 uses a responsive justified grid.
 	DynamicRowCount     bool // If true, the number of entries per page can be greater than 10
 	MaxMenuStartRow     int  // Max number of rows occupied by the title section before the menu. Works only when DynamicRowCount is on.
 	CenterEverything    bool // If true, everything will be centered. Otherwise, use default layout.

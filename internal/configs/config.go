@@ -29,6 +29,7 @@ func (cfg *Config) FillToModelOpts(opts *model.Options) {
 	opts.LoadingText = cfg.Theme.LoadingText
 	opts.PrimaryColor = cfg.Theme.PrimaryColor
 	opts.DualColumn = cfg.Theme.DoubleColumn
+	opts.MenuColumns = max(0, min(3, cfg.Theme.MenuColumns))
 
 	if cfg.Main.EnableMouseEvent {
 		opts.TeaOptions = append(opts.TeaOptions, tea.WithMouseCellMotion())

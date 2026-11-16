@@ -21,6 +21,8 @@ type Main struct {
 	app *App
 
 	isDualColumn bool
+	gridColumns  int
+	gridHits     []menuGridHit
 
 	menuTitle            *MenuItem
 	menuTitleStartRow    int
@@ -115,6 +117,10 @@ func (m *Main) Update(msg tea.Msg, a *App) (Page, tea.Cmd) {
 		return m, nil
 	case tea.WindowSizeMsg:
 		m.isDualColumn = msg.Width >= 75 && m.options.DualColumn
+		m.configureMenuGrid(msg.Width)
+		if m.gridColumns > 0 {
+			m.menuPageSize = 10
+		}
 
 		// menu start col, row
 		m.menuStartRow = msg.Height / 3
@@ -156,6 +162,8 @@ func (m *Main) Update(msg tea.Msg, a *App) (Page, tea.Cmd) {
 		if m.menuStartColumn < 0 {
 			m.menuStartColumn = 0
 		}
+
+		m.finalizeMenuGrid(msg.Width)
 
 		// menu title satrt col, row
 		m.menuTitleStartColumn = m.menuStartColumn
@@ -365,7 +373,7 @@ func (m *Main) MenuTitleView(a *App, top *int, menuTitle *MenuItem) string {
 
 	realString := menuTitle.OriginString()
 	formatString := menuTitle.String()
-	if m.options.CenterEverything {
+	if m.options.CenterEverything && m.gridColumns == 0 {
 		stringLen := runewidth.StringWidth(realString)
 		if stringLen >= windowWidth {
 			title = runewidth.Truncate(formatString, windowWidth, "")
@@ -409,6 +417,9 @@ func (m *Main) MenuList() []MenuItem {
 }
 
 func (m *Main) getNumColumns() int {
+	if m.gridColumns > 0 {
+		return m.gridColumns
+	}
 	if m.isDualColumn {
 		return 2
 	}
@@ -564,20 +575,21 @@ func (m *Main) menuListView(a *App, top *int) string {
 		m.menuCurPage = m.selectedIndex/m.menuPageSize + 1
 	}
 	menus := m.getCurPageMenus()
-	var lines, maxLines int
-	if m.isDualColumn {
-		lines = int(math.Ceil(float64(len(menus)) / 2))
-		maxLines = int(math.Ceil(float64(m.menuPageSize) / 2))
-	} else {
-		lines = len(menus)
-		maxLines = m.menuPageSize
-	}
+	columns := m.getNumColumns()
+	lines := (len(menus) + columns - 1) / columns
+	maxLines := (m.menuPageSize + columns - 1) / columns
 
 	if m.menuStartRow > *top {
 		menuListBuilder.WriteString(strings.Repeat("\n", m.menuStartRow-*top))
 	}
 
-	if m.options.CenterEverything {
+	if m.gridColumns > 0 {
+		m.gridHits = nil
+		for line := 0; line < lines; line++ {
+			menuListBuilder.WriteString(m.menuGridLine(a, line))
+			menuListBuilder.WriteByte('\n')
+		}
+	} else if m.options.CenterEverything {
 		menuListBuilder.WriteString(m.centeredMenuView(a, lines))
 	} else {
 		for i := 0; i < lines; i++ {
@@ -908,6 +920,9 @@ type menuStackItem struct {
 }
 
 func (m *Main) MoveUp() Page {
+	if m.gridColumns > 0 {
+		return m.moveGridVertical(-1)
+	}
 	var (
 		topHook = m.menu.TopOutHook()
 		newPage Page
@@ -952,6 +967,9 @@ func (m *Main) MoveUp() Page {
 }
 
 func (m *Main) MoveDown() Page {
+	if m.gridColumns > 0 {
+		return m.moveGridVertical(1)
+	}
 	var (
 		bottomHook = m.menu.BottomOutHook()
 		newPage    Page
@@ -995,6 +1013,9 @@ func (m *Main) MoveDown() Page {
 }
 
 func (m *Main) MoveLeft() Page {
+	if m.gridColumns > 0 {
+		return m.moveGridHorizontal(-1)
+	}
 	if !m.isDualColumn || m.selectedIndex%2 == 0 || m.selectedIndex-1 < 0 {
 		return nil
 	}
@@ -1003,6 +1024,9 @@ func (m *Main) MoveLeft() Page {
 }
 
 func (m *Main) MoveRight() Page {
+	if m.gridColumns > 0 {
+		return m.moveGridHorizontal(1)
+	}
 	if !m.isDualColumn || m.selectedIndex%2 != 0 {
 		return nil
 	}
@@ -1028,6 +1052,11 @@ func (m *Main) MoveRight() Page {
 }
 
 func (m *Main) MoveTop() Page {
+	if m.gridColumns > 0 {
+		m.selectedIndex = gridMin(gridMax(0, len(m.menuList)-1), m.selectedIndex%m.gridColumns)
+		m.menuCurPage = 1
+		return nil
+	}
 	if m.isDualColumn {
 		m.selectedIndex = m.selectedIndex % 2
 	} else {
@@ -1038,6 +1067,20 @@ func (m *Main) MoveTop() Page {
 }
 
 func (m *Main) MoveBottom() Page {
+	if m.gridColumns > 0 {
+		last := len(m.menuList) - 1
+		if last < 0 {
+			return nil
+		}
+		column := m.selectedIndex % m.gridColumns
+		target := last - (last-column+m.gridColumns)%m.gridColumns
+		if target < 0 {
+			target = last
+		}
+		m.selectedIndex = target
+		m.menuCurPage = target/m.menuPageSize + 1
+		return nil
+	}
 	if m.isDualColumn && len(m.menuList)%2 == 0 {
 		m.selectedIndex = len(m.menuList) + (m.selectedIndex%2 - 2)
 	} else if m.isDualColumn && m.selectedIndex%2 != 0 {
@@ -1070,6 +1113,9 @@ func (m *Main) PrePage() Page {
 		return nil
 	}
 	m.menuCurPage--
+	if m.gridColumns > 0 && m.selectedIndex >= m.menuCurPage*m.menuPageSize {
+		m.selectedIndex = gridMin(len(m.menuList)-1, m.getPageStartIndex()+m.selectedIndex%m.menuPageSize)
+	}
 	return newPage
 }
 
@@ -1092,6 +1138,9 @@ func (m *Main) NextPage() Page {
 	}
 
 	m.menuCurPage++
+	if m.gridColumns > 0 && m.selectedIndex < m.getPageStartIndex() {
+		m.selectedIndex = gridMin(len(m.menuList)-1, m.getPageStartIndex()+m.selectedIndex%m.menuPageSize)
+	}
 	return newPage
 }
 

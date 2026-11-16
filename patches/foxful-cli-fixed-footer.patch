@@ -82,7 +82,7 @@ index 3fced3f8..e063fbe1 100644
 +	Invalidate()
 +}
 diff --git a/model/main.go b/model/main.go
-index 5cb962eb..290b76e4 100644
+index 5cb962eb..f5f0c533 100644
 --- a/model/main.go
 +++ b/model/main.go
 @@ -6,6 +6,7 @@ import (
@@ -93,7 +93,27 @@ index 5cb962eb..290b76e4 100644
  	"github.com/muesli/termenv"
  	"math"
  	"slices"
-@@ -152,6 +153,10 @@ func (m *Main) Update(msg tea.Msg, a *App) (Page, tea.Cmd) {
+@@ -20,6 +21,8 @@ type Main struct {
+ 	app *App
+ 
+ 	isDualColumn bool
++	gridColumns  int
++	gridHits     []menuGridHit
+ 
+ 	menuTitle            *MenuItem
+ 	menuTitleStartRow    int
+@@ -114,6 +117,10 @@ func (m *Main) Update(msg tea.Msg, a *App) (Page, tea.Cmd) {
+ 		return m, nil
+ 	case tea.WindowSizeMsg:
+ 		m.isDualColumn = msg.Width >= 75 && m.options.DualColumn
++		m.configureMenuGrid(msg.Width)
++		if m.gridColumns > 0 {
++			m.menuPageSize = 10
++		}
+ 
+ 		// menu start col, row
+ 		m.menuStartRow = msg.Height / 3
+@@ -152,6 +159,12 @@ func (m *Main) Update(msg tea.Msg, a *App) (Page, tea.Cmd) {
  			m.menuBottomRow = m.menuStartRow + m.menuPageSize + 1 // 1 for search bar
  		}
  
@@ -101,10 +121,12 @@ index 5cb962eb..290b76e4 100644
 +			m.menuStartColumn = 0
 +		}
 +
++		m.finalizeMenuGrid(msg.Width)
++
  		// menu title satrt col, row
  		m.menuTitleStartColumn = m.menuStartColumn
  		if m.options.WhetherDisplayTitle && m.menuStartRow > 2 {
-@@ -217,21 +222,53 @@ func (m *Main) View(a *App) string {
+@@ -217,21 +230,53 @@ func (m *Main) View(a *App) string {
  	builder.WriteString("\n\n")
  	top += 2
  
@@ -167,3 +189,333 @@ index 5cb962eb..290b76e4 100644
  }
  
  func (m *Main) MenuTitleStartColumn() int {
+@@ -328,7 +373,7 @@ func (m *Main) MenuTitleView(a *App, top *int, menuTitle *MenuItem) string {
+ 
+ 	realString := menuTitle.OriginString()
+ 	formatString := menuTitle.String()
+-	if m.options.CenterEverything {
++	if m.options.CenterEverything && m.gridColumns == 0 {
+ 		stringLen := runewidth.StringWidth(realString)
+ 		if stringLen >= windowWidth {
+ 			title = runewidth.Truncate(formatString, windowWidth, "")
+@@ -372,6 +417,9 @@ func (m *Main) MenuList() []MenuItem {
+ }
+ 
+ func (m *Main) getNumColumns() int {
++	if m.gridColumns > 0 {
++		return m.gridColumns
++	}
+ 	if m.isDualColumn {
+ 		return 2
+ 	}
+@@ -527,20 +575,21 @@ func (m *Main) menuListView(a *App, top *int) string {
+ 		m.menuCurPage = m.selectedIndex/m.menuPageSize + 1
+ 	}
+ 	menus := m.getCurPageMenus()
+-	var lines, maxLines int
+-	if m.isDualColumn {
+-		lines = int(math.Ceil(float64(len(menus)) / 2))
+-		maxLines = int(math.Ceil(float64(m.menuPageSize) / 2))
+-	} else {
+-		lines = len(menus)
+-		maxLines = m.menuPageSize
+-	}
++	columns := m.getNumColumns()
++	lines := (len(menus) + columns - 1) / columns
++	maxLines := (m.menuPageSize + columns - 1) / columns
+ 
+ 	if m.menuStartRow > *top {
+ 		menuListBuilder.WriteString(strings.Repeat("\n", m.menuStartRow-*top))
+ 	}
+ 
+-	if m.options.CenterEverything {
++	if m.gridColumns > 0 {
++		m.gridHits = nil
++		for line := 0; line < lines; line++ {
++			menuListBuilder.WriteString(m.menuGridLine(a, line))
++			menuListBuilder.WriteByte('\n')
++		}
++	} else if m.options.CenterEverything {
+ 		menuListBuilder.WriteString(m.centeredMenuView(a, lines))
+ 	} else {
+ 		for i := 0; i < lines; i++ {
+@@ -871,6 +920,9 @@ type menuStackItem struct {
+ }
+ 
+ func (m *Main) MoveUp() Page {
++	if m.gridColumns > 0 {
++		return m.moveGridVertical(-1)
++	}
+ 	var (
+ 		topHook = m.menu.TopOutHook()
+ 		newPage Page
+@@ -915,6 +967,9 @@ func (m *Main) MoveUp() Page {
+ }
+ 
+ func (m *Main) MoveDown() Page {
++	if m.gridColumns > 0 {
++		return m.moveGridVertical(1)
++	}
+ 	var (
+ 		bottomHook = m.menu.BottomOutHook()
+ 		newPage    Page
+@@ -958,6 +1013,9 @@ func (m *Main) MoveDown() Page {
+ }
+ 
+ func (m *Main) MoveLeft() Page {
++	if m.gridColumns > 0 {
++		return m.moveGridHorizontal(-1)
++	}
+ 	if !m.isDualColumn || m.selectedIndex%2 == 0 || m.selectedIndex-1 < 0 {
+ 		return nil
+ 	}
+@@ -966,6 +1024,9 @@ func (m *Main) MoveLeft() Page {
+ }
+ 
+ func (m *Main) MoveRight() Page {
++	if m.gridColumns > 0 {
++		return m.moveGridHorizontal(1)
++	}
+ 	if !m.isDualColumn || m.selectedIndex%2 != 0 {
+ 		return nil
+ 	}
+@@ -991,6 +1052,11 @@ func (m *Main) MoveRight() Page {
+ }
+ 
+ func (m *Main) MoveTop() Page {
++	if m.gridColumns > 0 {
++		m.selectedIndex = gridMin(gridMax(0, len(m.menuList)-1), m.selectedIndex%m.gridColumns)
++		m.menuCurPage = 1
++		return nil
++	}
+ 	if m.isDualColumn {
+ 		m.selectedIndex = m.selectedIndex % 2
+ 	} else {
+@@ -1001,6 +1067,20 @@ func (m *Main) MoveTop() Page {
+ }
+ 
+ func (m *Main) MoveBottom() Page {
++	if m.gridColumns > 0 {
++		last := len(m.menuList) - 1
++		if last < 0 {
++			return nil
++		}
++		column := m.selectedIndex % m.gridColumns
++		target := last - (last-column+m.gridColumns)%m.gridColumns
++		if target < 0 {
++			target = last
++		}
++		m.selectedIndex = target
++		m.menuCurPage = target/m.menuPageSize + 1
++		return nil
++	}
+ 	if m.isDualColumn && len(m.menuList)%2 == 0 {
+ 		m.selectedIndex = len(m.menuList) + (m.selectedIndex%2 - 2)
+ 	} else if m.isDualColumn && m.selectedIndex%2 != 0 {
+@@ -1033,6 +1113,9 @@ func (m *Main) PrePage() Page {
+ 		return nil
+ 	}
+ 	m.menuCurPage--
++	if m.gridColumns > 0 && m.selectedIndex >= m.menuCurPage*m.menuPageSize {
++		m.selectedIndex = gridMin(len(m.menuList)-1, m.getPageStartIndex()+m.selectedIndex%m.menuPageSize)
++	}
+ 	return newPage
+ }
+ 
+@@ -1055,6 +1138,9 @@ func (m *Main) NextPage() Page {
+ 	}
+ 
+ 	m.menuCurPage++
++	if m.gridColumns > 0 && m.selectedIndex < m.getPageStartIndex() {
++		m.selectedIndex = gridMin(len(m.menuList)-1, m.getPageStartIndex()+m.selectedIndex%m.menuPageSize)
++	}
+ 	return newPage
+ }
+ 
+diff --git a/model/menu_grid.go b/model/menu_grid.go
+new file mode 100644
+index 00000000..3fa9344a
+--- /dev/null
++++ b/model/menu_grid.go
+@@ -0,0 +1,169 @@
++package model
++
++import (
++	"fmt"
++	"strings"
++
++	"github.com/anhoder/foxful-cli/util"
++	"github.com/muesli/reflow/ansi"
++	"github.com/muesli/reflow/truncate"
++)
++
++type menuGridHit struct{ index, x, y, width int }
++
++// MenuColumnCount exposes the actual responsive column count.
++func (m *Main) MenuColumnCount() int { return m.getNumColumns() }
++
++func (m *Main) configureMenuGrid(width int) {
++	m.gridColumns = 0
++	if m.options.MenuColumns <= 0 {
++		return
++	}
++	m.gridColumns = gridMin(3, m.options.MenuColumns)
++	if width < 110 {
++		m.gridColumns = gridMin(2, m.gridColumns)
++	}
++	if width < 75 {
++		m.gridColumns = 1
++	}
++	m.isDualColumn = m.gridColumns > 1
++}
++func (m *Main) finalizeMenuGrid(width int) {
++	if m.gridColumns == 0 {
++		return
++	}
++	columns := m.gridColumns
++	m.menuPageSize = gridMax(columns, (m.menuPageSize+columns-1)/columns*columns)
++	m.menuCurPage = gridMax(1, m.selectedIndex/m.menuPageSize+1)
++	m.menuStartColumn = gridMin(gridMax(0, width-1), gridMax(2, width/20))
++	m.menuTitleStartColumn = m.menuStartColumn
++	m.menuBottomRow = m.menuStartRow + (m.menuPageSize+columns-1)/columns + 1
++	m.gridHits = nil
++}
++
++func (m *Main) menuGridLine(a *App, line int) string {
++	width := a.WindowWidth()
++	columns := m.gridColumns
++	left := m.menuStartColumn
++	right := gridMax(left, width-left)
++	gap := gridMin(4, gridMax(1, (right-left)/gridMax(1, columns*12)))
++	cellWidth := gridMax(1, (right-left-gap*(columns-1))/columns)
++	var b strings.Builder
++	cursor := 0
++	pageStart := m.getPageStartIndex()
++	for column := 0; column < columns; column++ {
++		index := pageStart + line*columns + column
++		if index >= len(m.menuList) || index >= pageStart+m.menuPageSize {
++			break
++		}
++		start := left + column*(cellWidth+gap)
++		end := gridMin(width, start+cellWidth)
++		if column == columns-1 {
++			end = gridMin(width, right)
++		}
++		item := m.menuList[index]
++		text := fmt.Sprintf("  %*d. %s", m.getMaxIndexWidth(), index, item.OriginString())
++		if m.isSelected(index) {
++			text = fmt.Sprintf("› %*d. %s", m.getMaxIndexWidth(), index, item.OriginString())
++		}
++		text = truncate.StringWithTail(text, uint(gridMax(1, end-start)), "…")
++		length := ansi.PrintableRuneWidth(text)
++		x := start
++		x = gridMax(cursor, x)
++		b.WriteString(strings.Repeat(" ", gridMax(0, x-cursor)))
++		if m.isSelected(index) {
++			b.WriteString(util.SetFgStyle(text, util.GetPrimaryColor()))
++		} else {
++			b.WriteString(util.SetNormalStyle(text))
++		}
++		m.gridHits = append(m.gridHits, menuGridHit{index, x, m.menuStartRow + line - 1, length})
++		cursor = x + length
++	}
++	b.WriteString(strings.Repeat(" ", gridMax(0, width-cursor)))
++	return b.String()
++}
++
++// MenuIndexAt uses the same rendered bounds as the responsive menu grid.
++func (m *Main) MenuIndexAt(x, y int) (int, bool) {
++	for _, hit := range m.gridHits {
++		if hit.y == y && x >= hit.x && x < hit.x+hit.width {
++			return hit.index, true
++		}
++	}
++	return 0, false
++}
++
++func (m *Main) moveGridVertical(delta int) Page {
++	target := m.selectedIndex + delta*m.gridColumns
++	var next Page
++	if target < 0 {
++		if hook := m.menu.TopOutHook(); hook != nil {
++			loading := NewLoading(m)
++			loading.Start()
++			ok, page := hook(m)
++			loading.Complete()
++			if !ok {
++				return page
++			}
++			m.menuList = m.menu.MenuViews()
++		}
++	} else if target >= len(m.menuList) {
++		if hook := m.menu.BottomOutHook(); hook != nil {
++			loading := NewLoading(m)
++			loading.Start()
++			ok, page := hook(m)
++			loading.Complete()
++			if !ok {
++				return page
++			}
++			m.menuList = m.menu.MenuViews()
++		}
++	}
++	if target < 0 || target >= len(m.menuList) {
++		return next
++	}
++	m.selectedIndex = target
++	if target < m.getPageStartIndex() {
++		next = m.PrePage()
++	} else if target >= m.menuCurPage*m.menuPageSize {
++		next = m.NextPage()
++	}
++	return next
++}
++func (m *Main) moveGridHorizontal(delta int) Page {
++	column := (m.selectedIndex - m.getPageStartIndex()) % m.gridColumns
++	if column+delta < 0 || column+delta >= m.gridColumns {
++		return nil
++	}
++	target := m.selectedIndex + delta
++	if delta > 0 && target >= len(m.menuList) {
++		if hook := m.menu.BottomOutHook(); hook != nil {
++			loading := NewLoading(m)
++			loading.Start()
++			ok, page := hook(m)
++			loading.Complete()
++			if !ok {
++				return page
++			}
++			m.menuList = m.menu.MenuViews()
++		}
++	}
++	if target < 0 || target >= len(m.menuList) {
++		return nil
++	}
++	m.selectedIndex = target
++	return nil
++}
++
++func gridMin(a, b int) int {
++	if a < b {
++		return a
++	}
++	return b
++}
++func gridMax(a, b int) int {
++	if a > b {
++		return a
++	}
++	return b
++}
+diff --git a/model/options.go b/model/options.go
+index ca1999a5..889515bb 100644
+--- a/model/options.go
++++ b/model/options.go
+@@ -16,6 +16,7 @@ type Options struct {
+ 	LoadingText         string
+ 	PrimaryColor        string
+ 	DualColumn          bool // The menu list is displayed as a dual column
++	MenuColumns         int  // 0 preserves DualColumn; 1-3 uses a responsive justified grid.
+ 	DynamicRowCount     bool // If true, the number of entries per page can be greater than 10
+ 	MaxMenuStartRow     int  // Max number of rows occupied by the title section before the menu. Works only when DynamicRowCount is on.
+ 	CenterEverything    bool // If true, everything will be centered. Otherwise, use default layout.
