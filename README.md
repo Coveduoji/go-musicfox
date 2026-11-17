@@ -545,8 +545,9 @@ DLNA 引擎允许你将音乐投送到兼容 DLNA 的设备（如智能电视、
 | `appendSongsToNext`                 | 添加为下一曲播放              | `e`                                             |
 | `appendSongsAfterCurPlaylist`       | 添加到播放列表末尾            | `E`                                             |
 | `delSongFromCurPlaylist`            | 从播放列表删除选中歌曲        | `\`, `、`                                     |
-| `likePlayingSong`                   | 喜欢播放中歌曲                | `,`, `，`                                     |
-| `dislikePlayingSong`                | 取消喜欢播放中歌曲            | `.`, `。`                                     |
+| `toggleLikePlayingSong`             | 切换播放中歌曲的喜欢状态      | `.`, `。`                                     |
+| `likePlayingSong`                   | 喜欢播放中歌曲                | *(无)*                                        |
+| `dislikePlayingSong`                | 取消喜欢播放中歌曲            | *(无)*                                        |
 | `trashPlayingSong`                  | 标记播放中歌曲为不喜欢        | `t`                                             |
 | `addPlayingSongToUserPlaylist`      | 将播放中歌曲加入歌单          | `` ` ``                                         |
 | `removePlayingSongFromUserPlaylist` | 将播放歌曲从歌单中删除        | `~`, `～`                                     |

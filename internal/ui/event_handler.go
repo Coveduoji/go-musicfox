@@ -1,3 +1,4 @@
+// Package ui implements the terminal music interface.
 package ui
 
 import (
@@ -101,6 +102,9 @@ func (h *EventHandler) handle(op keybindings.OperateType) (bool, model.Page, tea
 		player.SwitchMode()
 	case keybindings.OpIntelligence:
 		newPage := player.Intelligence(false)
+		return true, newPage, app.Tick(time.Nanosecond)
+	case keybindings.OpToggleLikePlayingSong:
+		newPage := likeSong(h.netease, !likelist.IsLikeSong(player.CurSong().Id), false)
 		return true, newPage, app.Tick(time.Nanosecond)
 	case keybindings.OpLikePlayingSong:
 		newPage := likeSong(h.netease, true, false)
@@ -671,7 +675,7 @@ func (h *EventHandler) handlePlayerBarClick(msg tea.MouseMsg, a *model.App, main
 		case "state":
 			h.playOrToggleHandle()
 		case "heart":
-			return true, likeSong(h.netease, !likelist.IsLikeSong(h.netease.player.CurSong().Id), false), a.Tick(time.Nanosecond)
+			return h.handle(keybindings.OpToggleLikePlayingSong)
 		case "song":
 			action(h.netease, true)
 		case "artist":
@@ -715,7 +719,7 @@ func (h *EventHandler) handleAdaptivePlayback(msg tea.MouseMsg, hit *playbackHit
 	case "queue":
 		return h.handle(keybindings.OpCurPlaylist)
 	case "heart":
-		return true, likeSong(h.netease, !likelist.IsLikeSong(player.CurSong().Id), false), a.Tick(time.Nanosecond)
+		return h.handle(keybindings.OpToggleLikePlayingSong)
 	case "spectrum":
 		bar := h.netease.playbackBarRenderer
 		bar.SetSpectrumEnabled(!bar.spectrumEnabled)

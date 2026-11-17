@@ -1,4 +1,4 @@
-// internal/keybindings/keybindings.go
+// Package keybindings defines keyboard operations and their bindings.
 package keybindings
 
 import (
@@ -107,6 +107,7 @@ const (
 
 	OpActionOfSelected
 	OpActionOfPlayingSong
+	OpToggleLikePlayingSong
 )
 
 var opNameToOperateMap = make(map[string]OperateType)
@@ -146,6 +147,7 @@ var keyBindingsRegistry = map[OperateType]OperationInfo{
 	OpAppendSongsToNext:              {name: "appendSongsToNext", desc: "添加为下一曲播放"},
 	OpAppendSongsToEnd:               {name: "appendSongsAfterCurPlaylist", desc: "添加到播放列表末尾"},
 	OpDeleteSongFromPlaylist:         {name: "delSongFromCurPlaylist", desc: "从播放列表删除选中歌曲"},
+	OpToggleLikePlayingSong:          {name: "toggleLikePlayingSong", desc: "切换播放中歌曲的喜欢状态"},
 	OpLikePlayingSong:                {name: "likePlayingSong", desc: "喜欢播放中歌曲"},
 	OpDislikePlayingSong:             {name: "dislikePlayingSong", desc: "取消喜欢播放中歌曲"},
 	OpTrashPlayingSong:               {name: "trashPlayingSong", desc: "标记播放中歌曲为不喜欢"},
@@ -216,8 +218,7 @@ var defaultOtherOperateToKeys = map[OperateType][]string{
 	OpAppendSongsToNext:              {"e"},
 	OpAppendSongsToEnd:               {"E"},
 	OpDeleteSongFromPlaylist:         {"\\", "、"},
-	OpLikePlayingSong:                {",", "，"},
-	OpDislikePlayingSong:             {".", "。"},
+	OpToggleLikePlayingSong:          {".", "。"},
 	OpTrashPlayingSong:               {"t"},
 	OpAddPlayingToUserPlaylist:       {"`"},
 	OpRemovePlayingFromUserPlaylist:  {"~", "～"},
@@ -524,7 +525,7 @@ func BuildKeyToOperateTypeMap(effectiveBindings map[OperateType][]string) map[st
 	return keyMap
 }
 
-// 使用操作名称查询 OperateType
+// GetOperationFromName returns the operation associated with a name.
 func GetOperationFromName(opName string) (OperateType, bool) {
 	op, ok := opNameToOperateMap[opName]
 	return op, ok
