@@ -167,6 +167,8 @@ type Player interface {
 
 支持 40+ 键盘操作、鼠标事件（单击/双击/滚轮/右键）、可配置快捷键。
 
+Enter 在可播放歌曲列表复用原选中播放流程；选中当前歌曲时保持播放或恢复暂停，不反向暂停。普通菜单 Enter 与 n/N 仍沿原进入逻辑。空格默认绑定 `toggle`，仅对 Playing/Paused 调用播放器 Toggle，Stopped 时不选择新歌；`playOrToggle` 保留为可选旧操作，默认无绑定。
+
 ### 其他模块
 
 - **歌词**：LRC/YRC 格式，支持 smooth/wave/glow 渲染模式

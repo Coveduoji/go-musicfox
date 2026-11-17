@@ -48,6 +48,10 @@ func NewEventHandler(netease *Netease) *EventHandler {
 // KeyMsgHandle 处理键盘事件
 func (h *EventHandler) KeyMsgHandle(msg tea.KeyMsg, _ *model.App) (bool, model.Page, tea.Cmd) {
 	if op, ok := h.keyToOperateMap[msg.String()]; ok {
+		if op == keybindings.OpEnter && msg.Type == tea.KeyEnter && h.playSelectedSongHandle() {
+			return true, h.netease.MustMain(), h.netease.Tick(time.Nanosecond)
+		}
+
 		stopPropagation, newPage, cmd := h.handle(op)
 		return stopPropagation, newPage, cmd
 	}
@@ -77,9 +81,8 @@ func (h *EventHandler) handle(op keybindings.OperateType) (bool, model.Page, tea
 	case keybindings.OpPlayOrToggle:
 		h.playOrToggleHandle()
 	case keybindings.OpToggle:
-		if player.State() == types.Stopped {
-			h.playOrToggleHandle()
-		} else {
+		// Never switch to the selected song, including when the engine is stopped.
+		if player.State() == types.Playing || player.State() == types.Paused {
 			player.Toggle()
 		}
 	case keybindings.OpSeekForward5s:
@@ -251,6 +254,37 @@ func (h *EventHandler) enterKeyHandle() (stopPropagation bool, newPage model.Pag
 		return true, h.netease.MustMain(), h.netease.Tick(time.Nanosecond)
 	}
 	return false, nil, nil
+}
+
+// Enter plays a selected track; repeated Enter must not pause that track.
+func (h *EventHandler) playSelectedSongHandle() bool {
+	main := h.netease.MustMain()
+	menu := main.CurMenu()
+	playable, ok := menu.(Menu)
+	if !ok || !playable.IsPlayable() {
+		return false
+	}
+	songsMenu, ok := menu.(SongsMenu)
+	if !ok {
+		return false
+	}
+	songs := songsMenu.Songs()
+	selected := menu.RealDataIndex(main.SelectedIndex())
+	if selected < 0 || selected >= len(songs) {
+		return false
+	}
+	p := h.netease.player
+	if p.InPlayingMenu() && songs[selected].Id == p.CurSong().Id {
+		switch p.State() {
+		case types.Paused:
+			p.Resume()
+		case types.Stopped:
+			p.StartPlay()
+		}
+	} else {
+		h.playOrToggleHandle()
+	}
+	return true
 }
 
 func (h *EventHandler) playOrToggleHandle() {

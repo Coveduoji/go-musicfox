@@ -513,7 +513,7 @@ DLNA 引擎允许你将音乐投送到兼容 DLNA 的设备（如智能电视、
 | `moveDown`        | 下              | `j`, `J`, `Down`                              |
 | `moveToTop`       | 上移到顶部      | `g`                                           |
 | `moveToBottom`    | 下移到底部      | `G`                                           |
-| `enter`           | 进入            | `n`, `N`, `Enter`                             |
+| `enter`           | 进入；歌曲列表中 Enter 播放选中歌曲 | `n`, `N`, `Enter`                             |
 | `goBack`          | 返回上一级      | `b`, `B`, `Esc`                               |
 | `search`          | 搜索当前列表    | `/`, `／`, `、`                             |
 | `quit`            | 退出            | `q`, `Q`                                      |
@@ -527,8 +527,8 @@ DLNA 引擎允许你将音乐投送到兼容 DLNA 的设备（如智能电视、
 | `help`                              | 帮助信息                      | `?`, `？`                                     |
 | `pageUp`                            | 上一页                        | `Ctrl+u`, `PgUp`                                |
 | `pageDown`                          | 下一页                        | `Ctrl+d`, `PgDown`                              |
-| `playortoggle`                      | 播放/暂停                     | `Space`, ` `, `　`                           |
-| `toggle`                            | 切换播放状态                  | *(无)*                                          |
+| `playortoggle`                      | 旧的混合播放/暂停操作          | *(无)*                                          |
+| `toggle`                            | 仅暂停/继续当前歌曲，停止时不切歌 | `Space`, ` `, `　`                           |
 | `previous`                          | 上一首                        | `[`, `【`                                     |
 | `next`                              | 下一首                        | `]`, `】`                                     |
 | `backwardOneSec`                    | 快退1秒                       | `x`                                             |
